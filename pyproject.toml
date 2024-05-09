@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "bioimageio-colab"
+version = "0.1.0"
+readme = "README.md"
+description = "Collaborative image annotation and model training with human in the loop."
+dependencies = [
+  "imjoy-rpc>=0.5.48.post2",
+  "requests",
+  "numpy",
+  "requests",
+  "kaibu-utils",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["bioimageio_colab*"]
+exclude = ["tests*"]
+
+[options.entry_points]
+console_scripts = [
+    "bioimageio-colab = bioimageio_colab.__main__:main",
+]
