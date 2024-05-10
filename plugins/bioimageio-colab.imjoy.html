@@ -23,7 +23,7 @@
 </config>
 
 <script lang="javascript">
-class BioImageIOCrowdSourcing {
+class BioImageIOColabAnnotator {
     constructor() {
         this.image = null;
         this.mask = null;
@@ -34,14 +34,20 @@ class BioImageIOCrowdSourcing {
     }
 
     async setup() {
+    }
+    
+    async run(ctx){
+        const config = ctx.config || {};
+        const serviceId = config.service_id || "biocolab";
+        const serverUrl = config.server_url || "https://ai.imjoy.io";
         const viewer = await api.createWindow({src: "https://kaibu.org/#/app", fullscreen: true});
-        await api.showMessage("Connecting to server....");
+        await api.showMessage(`Connecting to server ${serverUrl}....`);
         try{
-            const server = await hyphaWebsocketClient.connectToServer({server_url: "https://ai.imjoy.io"});
-            this.biocolab = await server.getService("biocolab");
+            const server = await hyphaWebsocketClient.connectToServer({server_url: serverUrl, token: config.token, workspace: config.workspace});
+            this.biocolab = await server.getService(serviceId);
         }
         catch(e){
-            await api.alert("Failed to get the biocolab service, please make sure you started the server.")
+            await api.alert(`Failed to get the bioimageio-colab service (id=${serviceId}), please make sure you started the server.`)
             return;
         }
 
@@ -97,5 +103,5 @@ class BioImageIOCrowdSourcing {
     }
 }
 
-api.export(new BioImageIOCrowdSourcing());
+api.export(new BioImageIOColabAnnotator());
 </script>
