@@ -48,14 +48,14 @@ class BioImageIOCrowdSourcing {
         // Define image reading and displaying function
         const getImage = async () => {
             if (this.image !== null) {
-                await viewer.removeLayer({id: this.imageLayer.id});
-                await viewer.removeLayer({id: this.annotationLayer.id});
+                await viewer.remove_layer({id: this.imageLayer.id});
+                await viewer.remove_layer({id: this.annotationLayer.id});
             }
 
-            [this.image, this.filename, this.newname] = await this.biocolab.getRandomImage();
-            this.imageLayer = await viewer.viewImage(this.image, {name: "image"});
+            [this.image, this.filename, this.newname] = await this.biocolab.get_random_image();
+            this.imageLayer = await viewer.view_image(this.image, {name: "image"});
             // Add the annotation functionality to the interface
-            this.annotationLayer = await viewer.addShapes([], {
+            this.annotationLayer = await viewer.add_shapes([], {
                 shape_tpe: "polygon",
                 draw_edge_color: "magenta",
                 name: "annotation",
@@ -63,9 +63,10 @@ class BioImageIOCrowdSourcing {
         };
 
         const saveAnnotation = async () => {
-            const annotation = await this.annotationLayer.getFeatures();
-            if(annotation.features.length > 0){   
-                await this.biocolab.saveAnnotation(this.filename, this.newname, features, [this.image.shape[0], this.image.shape[1]]);
+            if(!this.annotationLayer) return;
+            const annotation = await this.annotationLayer.get_features();
+            if(annotation.features.length > 0){
+                await this.biocolab.save_annotation(this.filename, this.newname, annotation, [this.image._rshape[0], this.image._rshape[1]]);
                 await api.showMessage("Annotation Saved to " + this.filename);
             }
             else{
@@ -75,8 +76,8 @@ class BioImageIOCrowdSourcing {
         };
 
         const nextImage = async (option) => {
-            await getImage();
             await saveAnnotation();
+            await getImage();
         };
 
         await viewer.add_widget({
