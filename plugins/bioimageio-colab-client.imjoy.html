@@ -5,7 +5,7 @@
 <config lang="json">
 {
   "name": "BioImage.IO Colab Client",
-  "type": "web-worker",
+  "type": "web-python",
   "tags": [],
   "ui": "",
   "version": "0.1.0",
@@ -23,27 +23,37 @@
 </config>
 
 <script lang="javascript">
-def get_random_image():
-    filenames = [f for f in os.listdir(path2data) if f.endswith(".tif")]
-    n = np.random.randint(len(filenames)-1)
-    image = imread(os.path.join(path2data, filenames[n]))
-    new_filename = f"{len(os.listdir(path2source)) + 1}_{filenames[n]}"
-    #imsave(os.path.join(path2source, new_filename), image)
-
-    return image, new_filename  
+from imjoy_rpc import api
+from imjoy_rpc.hypha import connect_to_server
 
 class BioImageIOCrowdSourcing():
-    
+    def __init__(self):
+        self.image = None
+        self.mask = None
+        self.filename = None
+        self.mask_id = None
+        self.image_id = None
+        self.annotation_layer = None
+
     async def setup(self):
-    
         viewer = await api.createWindow(src="https://kaibu.org/#/app", fullscreen=True)
+        await api.showMessage("Connecting to server....")
+        server = await connect_to_server({"server_url": "https://ai.imjoy.io"})
+        self.biocolab = await server.get_service("biocolab")
 
         ## Define image reading and displaying function
         async def get_image():
-            image, filename = get_random_image()
-            await viewer.view_image(image)
+            
+            if self.image is not None:
+                await viewer.remove_layer({"id": self.image_id.id})
+                await viewer.remove_layer({"id": self.annotation_layer.id})
+            
+            self.image, self.filename = await self.biocolab.get_random_image()
+            self.image_id = await viewer.view_image(
+                                self.image,
+                                name="image")
             # Add the little annotation functionality to the interface
-            annotation_layer = await viewer.add_shapes(
+            self.annotation_layer = await viewer.add_shapes(
                                     [],
                                     shape_type="polygon",
                                     draw_edge_color="magenta",
@@ -51,16 +61,29 @@ class BioImageIOCrowdSourcing():
                                     )
             
         ## Define image annotation printing into a mask with the name "mask"
-        async def get_annotation():
-            features = await annotation_layer.get_features()
-            mask = features_to_mask(features, [image.shape[0], image.shape[1]])
-            await viewer.view_image(
-                mask,
-                name="mask"
-            )
+        # async def create_mask():
+        #     self.features = await self.annotation_layer.get_features()
+        #     if self.mask is not None:
+        #         await viewer.remove_layer({"id": self.mask_id.id})
+                
+        #     self.mask = features_to_mask(self.features, [self.image.shape[0], self.image.shape[1]])
+        #     self.mask_id = await viewer.view_image(
+        #                     self.mask,
+        #                     name="mask"
+        #                 )
+        #     await api.showMessage("Mask created")
+            
         async def save_annotation():
-            imsave(os.path.join(path2source, filename), image)
-            imsave(os.path.join(path2label, filename), mask)
+            self.features = await self.annotation_layer.get_features()
+            await self.biocolab.save_annotation(self.filename, self.features, [self.image.shape[0], self.image.shape[1]])
+            await api.showMessage("Annotation Saved to " + self.filename)
+    
+        async def select_option(option):
+            if option == "Get Image":
+                await get_image()
+            elif option == "Save Annotations":
+                await save_annotation()  
+                
 
         await viewer.add_widget(
         {
@@ -69,22 +92,15 @@ class BioImageIOCrowdSourcing():
             "type": "control",
             "elements": [
                 {
-                    "type": "button",
-                    "label": "Get Image",
-                    "callback": get_image,
-                },
-                {
-                    "type": "button",
-                    "label": "Get Annotation Mask",
-                    "callback": get_annotation,
-                },
-                {
-                    "type": "button",
-                    "label": "Save annotations",
-                    "callback": save_annotation,
+                    "type": "dropdown",
+                    "label": "Options",
+                    "options": ["Get Image", "Save Annotations"],
+                    "callback": select_option,
                 }
             ],
         })
+
+        await api.showMessage("Redy to annotate!")
 
 api.export(BioImageIOCrowdSourcing())
 </script>

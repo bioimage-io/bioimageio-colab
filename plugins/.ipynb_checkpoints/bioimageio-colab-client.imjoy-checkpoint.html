@@ -1,0 +1,90 @@
+<docs>
+[TODO: write documentation for this plugin.]
+</docs>
+
+<config lang="json">
+{
+  "name": "BioImage.IO Colab Client",
+  "type": "web-worker",
+  "tags": [],
+  "ui": "",
+  "version": "0.1.0",
+  "cover": "",
+  "description": "[TODO: describe this plugin with one sentence.]",
+  "icon": "extension",
+  "inputs": null,
+  "outputs": null,
+  "api_version": "0.1.8",
+  "env": "",
+  "permissions": [],
+  "requirements": [],
+  "dependencies": []
+}
+</config>
+
+<script lang="javascript">
+def get_random_image():
+    filenames = [f for f in os.listdir(path2data) if f.endswith(".tif")]
+    n = np.random.randint(len(filenames)-1)
+    image = imread(os.path.join(path2data, filenames[n]))
+    new_filename = f"{len(os.listdir(path2source)) + 1}_{filenames[n]}"
+    #imsave(os.path.join(path2source, new_filename), image)
+
+    return image, new_filename  
+
+class BioImageIOCrowdSourcing():
+    
+    async def setup(self):
+    
+        viewer = await api.createWindow(src="https://kaibu.org/#/app", fullscreen=True)
+
+        ## Define image reading and displaying function
+        async def get_image():
+            image, filename = get_random_image()
+            await viewer.view_image(image)
+            # Add the little annotation functionality to the interface
+            annotation_layer = await viewer.add_shapes(
+                                    [],
+                                    shape_type="polygon",
+                                    draw_edge_color="magenta",
+                                    name="annotation",
+                                    )
+            
+        ## Define image annotation printing into a mask with the name "mask"
+        async def get_annotation():
+            features = await annotation_layer.get_features()
+            mask = features_to_mask(features, [image.shape[0], image.shape[1]])
+            await viewer.view_image(
+                mask,
+                name="mask"
+            )
+        async def save_annotation():
+            imsave(os.path.join(path2source, filename), image)
+            imsave(os.path.join(path2label, filename), mask)
+
+        await viewer.add_widget(
+        {
+            "_rintf": True,
+            "name": "Control",
+            "type": "control",
+            "elements": [
+                {
+                    "type": "button",
+                    "label": "Get Image",
+                    "callback": get_image,
+                },
+                {
+                    "type": "button",
+                    "label": "Get Annotation Mask",
+                    "callback": get_annotation,
+                },
+                {
+                    "type": "button",
+                    "label": "Save annotations",
+                    "callback": save_annotation,
+                }
+            ],
+        })
+
+api.export(BioImageIOCrowdSourcing())
+</script>
