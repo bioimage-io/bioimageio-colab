@@ -31,6 +31,7 @@ class BioImageIOCrowdSourcing():
         self.image = None
         self.mask = None
         self.filename = None
+        self.newname = None
         self.mask_id = None
         self.image_id = None
         self.annotation_layer = None
@@ -48,7 +49,7 @@ class BioImageIOCrowdSourcing():
                 await viewer.remove_layer({"id": self.image_id.id})
                 await viewer.remove_layer({"id": self.annotation_layer.id})
             
-            self.image, self.filename = await self.biocolab.get_random_image()
+            self.image, self.filename, self.newname = await self.biocolab.get_random_image()
             self.image_id = await viewer.view_image(
                                 self.image,
                                 name="image")
@@ -71,6 +72,38 @@ class BioImageIOCrowdSourcing():
         #                     self.mask,
         #                     name="mask"
         #                 )
+        #     await api.showMessage("Mask created")
+            
+        async def save_annotation():
+            self.features = await self.annotation_layer.get_features()
+            await self.biocolab.save_annotation(self.filename, self.newname, self.features, [self.image.shape[0], self.image.shape[1]])
+            await api.showMessage("Annotation Saved to " + self.filename)
+    
+        async def select_option(option):
+            if option == "Get Image":
+                await get_image()
+            elif option == "Save Annotations":
+                await save_annotation()  
+                
+
+        await viewer.add_widget(
+        {
+            "_rintf": True,
+            "name": "Control",
+            "type": "control",
+            "elements": [
+                {
+                    "type": "dropdown",
+                    "label": "Options",
+                    "options": ["Get Image", "Save Annotations"],
+                    "callback": select_option,
+                }
+            ],
+        })
+
+        await api.showMessage("Redy to annotate!")
+
+api.export(BioImageIOCrowdSourcing())               )
         #     await api.showMessage("Mask created")
             
         async def save_annotation():
