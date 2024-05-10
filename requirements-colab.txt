@@ -6,3 +6,5 @@ tifffile
 matplotlib
 imjoy-jupyterlab-extension
 kaibu-utils
+"opencv-python-headless<4.3"
+cellpose
