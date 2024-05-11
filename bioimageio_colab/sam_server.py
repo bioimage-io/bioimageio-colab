@@ -7,9 +7,11 @@ import numpy as np
 import requests
 import torch
 
+from kaibu_utils import mask_to_geojson
 from segment_anything import sam_model_registry, SamPredictor
 from segment_anything.utils.onnx import SamOnnxModel
 
+# TODO get this from the correct library
 from .hypha_data_store import HyphaDataStore
 
 IMAGE_URL = "https://owncloud.gwdg.de/index.php/s/fSaOJIOYjmFBjPM/download"
@@ -162,11 +164,7 @@ async def get_onnx(ds, model_name, opset_version=12):
     return url
 
 
-# TODO test this properly
 def interactive_segmentation(model_name, point_coordinates, point_labels):
-    # TODO how do we install it?
-    from kaibu_utils import mask_to_feature
-
     if MODEL_NAME is None:
         raise RuntimeError("Image Embeddings have not yet been computed.")
     if model_name != MODEL_NAME:
@@ -179,7 +177,7 @@ def interactive_segmentation(model_name, point_coordinates, point_labels):
         multimask_output=False
     )
 
-    feature = mask_to_feature(mask)
+    feature = mask_to_geojson(mask[0])
     return feature
 
 

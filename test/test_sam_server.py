@@ -29,10 +29,10 @@ class TestSamServer(unittest.TestCase):
         image = get_example_image()
         compute_embeddings("vit_b", image)
 
-        point_coords = np.array([100, 120]).reshape((1, 1, 2))
-        point_labels = np.array([1]).reshape((1, 1))
+        point_coords = np.array([100, 120]).reshape((1, 2))
+        point_labels = np.array([1])
         features = interactive_segmentation("vit_b", point_coords, point_labels)
-        # TODO check the features
+        assert isinstance(features, str)
 
 
 if __name__ == "__main__":
