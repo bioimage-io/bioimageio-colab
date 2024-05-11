@@ -38,7 +38,7 @@ class BioImageIOColabAnnotator {
     
     async run(ctx){
         const config = ctx.config || {};
-        const serviceId = config.service_id || "biocolab";
+        const serviceId = config.service_id || "bioimageio-colab";
         const serverUrl = config.server_url || "https://ai.imjoy.io";
         const viewer = await api.createWindow({src: "https://kaibu.org/#/app", fullscreen: true});
         await api.showMessage(`Connecting to server ${serverUrl}....`);
