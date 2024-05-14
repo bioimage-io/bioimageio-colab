@@ -29,7 +29,6 @@ class HyphaDataStore:
         return f"{self._server.config.public_base_url}/{self._server.config.workspace}/apps/{self._svc.id.split(':')[1]}/get?id={obj_id}"
 
     def put(self, obj_type: str, value: any, name: str, comment: str = ""):
-        assert self._svc, "Please call `setup()` before using the store"
         obj_id = str(uuid.uuid4())
         if obj_type == 'file':
             data = value
@@ -59,7 +58,6 @@ class HyphaDataStore:
         return obj_id
 
     def get(self, id: str):
-        assert self._svc, "Please call `setup()` before using the store"
         obj = self.storage.get(id)
         return obj
 

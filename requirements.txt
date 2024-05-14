@@ -7,3 +7,7 @@ matplotlib
 imjoy-jupyterlab-extension
 kaibu-utils
 jupyterlab
+segment_anything
+torch
+torchvision
+onnx

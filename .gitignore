@@ -13,3 +13,5 @@ output/
 data/
 .ipynb_checkpoints
 .DS_Store
+*.onnx
+*.pt

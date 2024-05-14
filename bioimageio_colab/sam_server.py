@@ -7,12 +7,16 @@ import numpy as np
 import requests
 import torch
 
-from kaibu_utils import mask_to_geojson
+from kaibu_utils import mask_to_features
 from segment_anything import sam_model_registry, SamPredictor
 from segment_anything.utils.onnx import SamOnnxModel
 
-# TODO get this from the correct library
-from .hypha_data_store import HyphaDataStore
+from bioimageio_colab.hypha_data_store import HyphaDataStore
+
+from logging import getLogger
+
+logger = getLogger(__name__)
+logger.setLevel("DEBUG")
 
 IMAGE_URL = "https://owncloud.gwdg.de/index.php/s/fSaOJIOYjmFBjPM/download"
 MODELS = {
@@ -20,10 +24,6 @@ MODELS = {
     "vit_b_lm": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/diplomatic-bug/staged/1/files/vit_b.pt",
     "vit_b_em_organelles": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/noisy-ox/staged/1/files/vit_b.pt",
 }
-
-# State for storing the last requested model.
-MODEL_NAME = None
-MODEL = None
 
 
 def get_model_names():
@@ -39,17 +39,20 @@ def get_sam_model(model_name):
     checkpoint_path = f"{model_name}.pt"
 
     if not os.path.exists(checkpoint_path):
+        logger.info(f"Downloading model from {model_url} to {checkpoint_path}...")
         response = requests.get(model_url)
         if response.status_code == 200:
             with open(checkpoint_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
+    logger.info(f"Loading model {model_name} from {checkpoint_path}...")
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model_type = model_name[:5]
     sam = sam_model_registry[model_type]()
     ckpt = torch.load(checkpoint_path, map_location=device)
     sam.load_state_dict(ckpt)
+    logger.info(f"Loaded model {model_name} from {checkpoint_path}")
     return sam
 
 
@@ -62,7 +65,7 @@ def export_onnx_model(
     use_stability_score: bool = False,
     return_extra_metrics: bool = False,
 ) -> None:
-
+    logger.info(f"Exporting model to ONNX with opset {opset}...")
     onnx_model = SamOnnxModel(
         model=sam,
         return_single_mask=return_single_mask,
@@ -114,6 +117,7 @@ def export_onnx_model(
                 output_names=output_names,
                 dynamic_axes=dynamic_axes,
             )
+    logger.info(f"Exported model to {output_path}")
 
 
 def get_example_image():
@@ -138,19 +142,24 @@ def _to_image(input_):
     return image
 
 
-def compute_embeddings(model_name, image):
-    global MODEL, MODEL_NAME
+def compute_embeddings(ds, model_name, image=None, return_embeddings=False):
+    logger.info(f"Computing embeddings for model {model_name}...")
     sam = get_sam_model(model_name)
     predictor = SamPredictor(sam)
     predictor.reset_image()
+    if image is None:
+        image = get_example_image()
     predictor.set_image(_to_image(image))
-    image_embeddings = predictor.get_image_embedding().cpu().numpy()
-
-    # Set the global state to use precomputed stuff for server side interactive segmentation.
-    MODEL_NAME = model_name
-    MODEL = predictor
-
-    return image_embeddings
+    if return_embeddings:
+        image_embeddings = predictor.get_image_embedding().cpu().numpy()
+        logger.info(f"Computed embeddings of shape {image_embeddings.shape}")
+        return image_embeddings
+    else:
+        # Set the global state to use precomputed stuff for server side interactive segmentation.
+        predictor_id = ds.put("object", predictor, 'predictor')
+        logger.info(f"Caching predictor with ID {predictor_id}")
+        # TODO: remove predictor
+        return predictor_id
 
 
 async def get_onnx(ds, model_name, opset_version=12):
@@ -164,21 +173,22 @@ async def get_onnx(ds, model_name, opset_version=12):
     return url
 
 
-def interactive_segmentation(model_name, point_coordinates, point_labels):
-    if MODEL_NAME is None:
-        raise RuntimeError("Image Embeddings have not yet been computed.")
-    if model_name != MODEL_NAME:
-        raise RuntimeError(f"Different model is loaded: {MODEL_NAME} is loaded but {model_name} was requested.")
-
-    predictor = MODEL
+def segment(ds, predictor_id, point_coordinates, point_labels):
+    logger.info(f"Segmenting with predictor {predictor_id}...")
+    logger.debug(f"Point coordinates: {point_coordinates}, {point_labels}")
+    if isinstance(point_coordinates, list):
+        point_coordinates = np.array(point_coordinates, dtype=np.float32)
+    if isinstance(point_labels, list):
+        point_labels = np.array(point_labels, dtype=np.float32)
+    predictor = ds.get(predictor_id)['value']
     mask, scores, logits = predictor.predict(
         point_coords=point_coordinates[:, ::-1],  # SAM has reversed XY conventions
         point_labels=point_labels,
         multimask_output=False
     )
-
-    feature = mask_to_geojson(mask[0])
-    return feature
+    logger.info(f"Predicted mask of shape {mask.shape}")
+    features = mask_to_features(mask[0])
+    return features
 
 
 async def start_server():
@@ -186,7 +196,7 @@ async def start_server():
 
     server_url = "https://ai.imjoy.io"
 
-    token = await login({"server_url": server_url})
+    token = None # await login({"server_url": server_url})
     server = await connect_to_server({"server_url": server_url, "token": token})
 
     # Upload to hypha.
@@ -195,7 +205,7 @@ async def start_server():
 
     svc = await server.register_service({
         "name": "Sam Server",
-        "id": "bioimageio-colab",
+        "id": "bioimageio-colab-sam",
         "config": {
             "visibility": "public"
         },
@@ -208,24 +218,25 @@ async def start_server():
         "get_example_image": get_example_image,
         # compute the image embeddings:
         # pass the model-name and the image to compute the embeddings on
-        "compute_embeddings": compute_embeddings,
+        "compute_embeddings": partial(compute_embeddings, ds),
         # get the prompt encoder and mask decoder in onnx format
         # pass the model-name for which to get the onnx model
-        "get_onnx": partial(get_onnx, ds=ds),
+        "get_onnx": partial(get_onnx, ds),
         # run interactive segmentation based on prompts
         # NOTE: this is just for demonstration purposes. For fast annotation
         # and for reliable multi-user support you should use the ONNX model and run the interactive
         # segmentation client-side.
         # pass the model-name and the point coordinates and labels
         # returns the predicted mask encoded as geo json
-        "interactive_segmentation": interactive_segmentation,
+        "segment": partial(segment, ds),
+        "ping": lambda: "pong",
     })
     sid = svc["id"]
     print("The server was started with the following ID:")
     print(sid)
 
 
-def start_sam_server():
+if __name__ == "__main__":
     import asyncio
 
     loop = asyncio.get_event_loop()
