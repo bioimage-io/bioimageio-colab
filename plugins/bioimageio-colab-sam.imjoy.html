@@ -690,7 +690,8 @@ class BioImageIOColabSAM {
                         console.log("add point at", shape.geometry.coordinates)
                         if(!this.predictor_id)
                             this.predictor_id = await this.biocolab.compute_embeddings("vit_b", null, false)
-                        const point_coords = [shape.geometry.coordinates]//[[100, 120]]
+                        // The point coordinates need to be reversed to match the coordinate convention of SAM.
+                        const point_coords = [shape.geometry.coordinates.reverse()]
                         
                         const point_labels = []
                         for(let coord of point_coords){
