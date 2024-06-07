@@ -8,3 +8,8 @@ imjoy-jupyterlab-extension
 kaibu-utils
 opencv-python-headless<4.3
 cellpose
+jupyterlab
+segment_anything
+torch
+torchvision
+onnx

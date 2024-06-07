@@ -1,0 +1,1 @@
+from bioimageio_colab.sam_annotation_server import start_sam_annotation_server as start_server

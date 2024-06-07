@@ -15,12 +15,9 @@ from tifffile import imread, imwrite
 from bioimageio_colab.hypha_data_store import HyphaDataStore
 
 logger = getLogger(__name__)
-logger.setLevel("DEBUG")
+logger.setLevel("INFO")
 
 HPA_DATA_URL = "https://github.com/bioimage-io/bioimageio-colab/releases/download/v0.1/hpa-dataset-v2-98-rgb.zip"
-PATH2DATA = os.path.abspath("./hpa_data")
-PATH2SOURCE = os.path.abspath("./kaibu_annotations/source")
-PATH2LABEL = os.path.abspath("./kaibu_annotations/labels")
 MODELS = {
     "vit_b": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",
     "vit_b_lm": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/diplomatic-bug/1/files/vit_b.pt",
@@ -108,7 +105,7 @@ def segment(ds, predictor_id, point_coordinates, point_labels):
         point_labels=point_labels,
         multimask_output=False,
     )
-    logger.info(f"Predicted mask of shape {mask.shape}")
+    logger.debug(f"Predicted mask of shape {mask.shape}")
     features = mask_to_features(mask[0])
     return features
 
@@ -122,7 +119,8 @@ def download_zip(url, save_path):
     with open(save_path, "wb") as file:
         for data in response.iter_content(1024):
             file.write(data)
-    print(f"Downloaded {save_path}")
+
+    logger.info(f"Downloaded {save_path}")
 
 
 def unzip_file(zip_path, extract_to):
@@ -131,16 +129,16 @@ def unzip_file(zip_path, extract_to):
     """
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
         zip_ref.extractall(extract_to)
-    print(f"Extracted images to {extract_to}")
+    logger.info(f"Extracted images to {extract_to}")
 
 
-def get_random_image():
-    filenames = [f for f in os.listdir(PATH2DATA) if f.endswith(".tif")]
+def get_random_image(path2data, path2source):
+    filenames = [f for f in os.listdir(path2data) if f.endswith(".tif")]
     n = np.random.randint(len(filenames) - 1)
-    image = imread(os.path.join(PATH2DATA, filenames[n]))
+    image = imread(os.path.join(path2data, filenames[n]))
     if len(image.shape) == 3 and image.shape[0] == 3:
         image = np.transpose(image, [1, 2, 0])
-    new_filename = f"{len(os.listdir(PATH2SOURCE)) + 1}_{filenames[n]}"
+    new_filename = f"{len(os.listdir(path2source)) + 1}_{filenames[n]}"
     return (
         image,
         filenames[n],
@@ -148,37 +146,40 @@ def get_random_image():
     )
 
 
-def save_annotation(filename, newname, features, image_shape):
+def save_annotation(path2data, path2source, path2label, filename, newname, features, image_shape):
     mask = features_to_mask(features, image_shape)
-    image = imread(os.path.join(PATH2DATA, filename))
+    image = imread(os.path.join(path2data, filename))
     if len(image.shape) == 3 and image.shape[0] == 3:
         image = np.transpose(image, [1, 2, 0])
-    imwrite(os.path.join(PATH2SOURCE, newname), image)
-    imwrite(os.path.join(PATH2LABEL, newname), mask)
+    imwrite(os.path.join(path2source, newname), image)
+    imwrite(os.path.join(path2label, newname), mask)
 
 
-async def start_sam_annotation_server():
+async def start_sam_annotation_server(data_url: str, path2data: str="./data", outpath:str="./kaibu_annotations"):
     """
     Start the SAM annotation server.
 
     When multiple people open the link, they can join a common workspace as an ImJoy client
     """
     # Check if the data is available
-    if not os.path.exists(PATH2DATA):
+    path2data = os.path.abspath(path2data)
+    if not os.path.exists(path2data):
         # Create the path
-        os.makedirs(PATH2DATA)
+        os.makedirs(path2data)
         # Download the data
-        save_path = os.path.join(PATH2DATA, HPA_DATA_URL.split("/")[-1])
-        download_zip(HPA_DATA_URL, save_path)
+        save_path = os.path.join(path2data, data_url.split("/")[-1])
+        download_zip(data_url, save_path)
         # Unzip the data
-        unzip_file(save_path, PATH2DATA)
+        unzip_file(save_path, path2data)
         # Remove the zip file
         os.remove(save_path)
-        print(f"Removed {save_path}")
+        logger.info(f"Removed {save_path}")
 
     # Create the output paths
-    os.makedirs(PATH2SOURCE, exist_ok=True)
-    os.makedirs(PATH2LABEL, exist_ok=True)
+    path2source = os.path.abspath(os.path.join(outpath, "source"))
+    path2label = os.path.abspath(os.path.join(outpath, "labels"))
+    os.makedirs(path2source, exist_ok=True)
+    os.makedirs(path2label, exist_ok=True)
 
     # Connect to the server link
     server_url = "https://ai.imjoy.io"
@@ -196,10 +197,10 @@ async def start_sam_annotation_server():
             # Exposed functions:
             # get a random image from the dataset
             # returns the image as a numpy image
-            "get_random_image": get_random_image,
+            "get_random_image": partial(get_random_image, path2data, path2source),
             # save the annotation mask
             # pass the filename of the image, the new filename, the features and the image shape
-            "save_annotation": save_annotation,
+            "save_annotation": partial(save_annotation, path2data, path2source, path2label),
             # load the model
             # pass the model-name to load the model
             # returns the model-id
@@ -230,8 +231,9 @@ async def start_sam_annotation_server():
 
 if __name__ == "__main__":
     import asyncio
+    logger.setLevel("DEBUG")
 
     loop = asyncio.get_event_loop()
-    loop.create_task(start_sam_annotation_server())
+    loop.create_task(start_sam_annotation_server(data_url=HPA_DATA_URL))
 
     loop.run_forever()
