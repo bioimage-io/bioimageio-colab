@@ -1,7 +1,3 @@
-<docs>
-[TODO: write documentation for this plugin.]
-</docs>
-
 <config lang="json">
 {
   "name": "BioImage.IO Colab Annotator",
@@ -10,14 +6,17 @@
   "ui": "",
   "version": "0.1.0",
   "cover": "",
-  "description": "Collabrative Annotator for BioImage.IO",
+  "description": "Collaborative Annotator for BioImage.IO with Automated Segmentation",
   "icon": "extension",
   "inputs": null,
   "outputs": null,
   "api_version": "0.1.8",
   "env": "",
   "permissions": [],
-  "requirements": ["https://cdn.jsdelivr.net/npm/imjoy-rpc@0.5.6/dist/hypha-rpc-websocket.min.js"],
+  "requirements": [
+    "https://cdn.jsdelivr.net/npm/imjoy-rpc@0.5.6/dist/hypha-rpc-websocket.min.js",
+    "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"
+  ],
   "dependencies": []
 }
 </config>
@@ -25,67 +24,132 @@
 <script lang="javascript">
 class BioImageIOColabAnnotator {
     constructor() {
-        this.image = null;
-        this.mask = null;
-        this.filename = null;
-        this.newname = null;
-        this.imageLayer = null;
-        this.annotationLayer = null;
+        this.image = null; // Current image
+        this.mask = null; // Current mask
+        this.filename = null; // Filename of the current image
+        this.newname = null; // New name for the annotation file
+        this.imageLayer = null; // Layer displaying the image
+        this.annotationLayer = null; // Layer displaying the annotations
+        this.edgeColor = "magenta"; // Default edge color for annotations
     }
 
     async setup() {
+        // No setup actions required for now
     }
-    
-    async run(ctx){
+
+    async run(ctx) {
+        // Extract configuration settings
         const config = ctx.config || {};
         const serviceId = config.service_id || "bioimageio-colab";
         const serverUrl = config.server_url || "https://ai.imjoy.io";
+
+        // Create and display the viewer window
         const viewer = await api.createWindow({src: "https://kaibu.org/#/app", fullscreen: true});
         await api.showMessage(`Connecting to server ${serverUrl}....`);
-        try{
-            const server = await hyphaWebsocketClient.connectToServer({server_url: serverUrl, token: config.token, workspace: config.workspace});
+        
+        try {
+            // Connect to the Hypha server
+            const server = await hyphaWebsocketClient.connectToServer({
+                server_url: serverUrl, 
+                token: config.token, 
+                workspace: config.workspace
+            });
+            // Get the bioimageio-colab service from the server
             this.biocolab = await server.getService(serviceId);
-        }
-        catch(e){
-            await api.alert(`Failed to get the bioimageio-colab service (id=${serviceId}), please make sure you started the server.`)
+        } catch (e) {
+            // Alert if the connection to the service fails
+            await api.alert(`Failed to get the bioimageio-colab service (id=${serviceId}), please make sure you started the server.`);
             return;
         }
 
-        // Define image reading and displaying function
+        // Function to get a new image and set up the viewer
         const getImage = async () => {
             if (this.image !== null) {
+                // Remove existing layers if there is any image loaded
                 await viewer.remove_layer({id: this.imageLayer.id});
                 await viewer.remove_layer({id: this.annotationLayer.id});
             }
 
+            // Fetch a random image from the service
             [this.image, this.filename, this.newname] = await this.biocolab.get_random_image();
             this.imageLayer = await viewer.view_image(this.image, {name: "image"});
+
+            // Reset the predictorId for the new image
+            this.predictorId = null;
+
             // Add the annotation functionality to the interface
             this.annotationLayer = await viewer.add_shapes([], {
-                shape_tpe: "polygon",
-                draw_edge_color: "magenta",
+                shape_type: "polygon",
+                draw_edge_color: this.edgeColor,
                 name: "annotation",
+                _rintf: true,
+                // Callback for adding a new feature (annotation point)
+                add_feature_callback: async (shape) => {
+                    if (shape.geometry.type === "Point") {
+                        // The point coordinates need to be reversed to match the coordinate convention of SAM
+                        const pointCoords = [shape.geometry.coordinates.reverse()];
+                        const pointLabels = pointCoords.map(() => 1); // All points have a label of 1
+
+                        // Load the model if not already loaded
+                        if (!this.modelId) {
+                            api.showMessage("Loading the model...");
+                            this.modelId = await this.biocolab.load_model("vit_b");
+                        }
+
+                        // Compute embeddings if not already computed for the image
+                        if (!this.predictorId) {
+                            api.showMessage("Computing embeddings for the image...");
+                            this.predictorId = await this.biocolab.compute_embeddings(this.modelId, this.image);
+                        }
+
+                        // Perform segmentation
+                        api.showMessage("Segmenting...");
+                        const features = await this.biocolab.segment(this.predictorId, pointCoords, pointLabels);
+
+                        // Add the segmented features as polygons to the annotation layer
+                        for (let coords of features) {
+                            const polygon = {
+                                type: "Feature",
+                                coordinates: coords,
+                                geometry: {
+                                    type: "Polygon",
+                                    coordinates: [coords],
+                                },
+                                properties: {
+                                    edge_color: this.edgeColor,
+                                    edge_width: 2,
+                                    size: 7,
+                                },
+                            };
+                            this.annotationLayer.add_feature(polygon);
+                        }
+                    }
+                    //else if (shape.geometry.type !== "Polygon") {
+                    //    api.showMessage(`'${shape.geometry.type}' is not supported yet.`);
+                    //}
+                }
             });
         };
 
+        // Function to save the annotation
         const saveAnnotation = async () => {
-            if(!this.annotationLayer) return;
+            if (!this.annotationLayer) return;
             const annotation = await this.annotationLayer.get_features();
-            if(annotation.features.length > 0){
+            if (annotation.features.length > 0) {
                 await this.biocolab.save_annotation(this.filename, this.newname, annotation, [this.image._rshape[0], this.image._rshape[1]]);
-                await api.showMessage("Annotation Saved to " + this.filename);
-            }
-            else{
+                await api.showMessage(`Annotation Saved to ${this.filename}`);
+            } else {
                 await api.showMessage("Skip saving annotation");
             }
-            
         };
 
-        const nextImage = async (option) => {
+        // Function to load the next image
+        const nextImage = async () => {
             await saveAnnotation();
             await getImage();
         };
 
+        // Add a control widget with a button to load the next image
         await viewer.add_widget({
             _rintf: true,
             name: "Control",
@@ -99,9 +163,12 @@ class BioImageIOColabAnnotator {
             ],
         });
 
+        // Load the initial image
+        await getImage();
         await api.showMessage("Ready to annotate!");
     }
 }
 
+// Export the annotator class
 api.export(new BioImageIOColabAnnotator());
 </script>

@@ -16,3 +16,5 @@ data/
 *.onnx
 *.pt
 *tif
+*zip
+visualize_annotation.py
