@@ -6,6 +6,7 @@ from logging import getLogger
 
 import numpy as np
 import requests
+import shutil
 import torch
 from imjoy_rpc.hypha import connect_to_server
 from kaibu_utils import features_to_mask, mask_to_features
@@ -23,6 +24,24 @@ MODELS = {
     "vit_b_lm": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/diplomatic-bug/1/files/vit_b.pt",
     "vit_b_em_organelles": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/noisy-ox/1/files/vit_b.pt",
 }
+
+
+def download_labels(ds, data_folder):
+    # Zip the output folder
+    zip_filename = f"{data_folder}.zip"
+    shutil.make_archive(data_folder, 'zip', data_folder)
+    logger.info(f"Zipped {data_folder} to {zip_filename}")
+
+    # Upload the zip file to HyphaDataStore
+    with open(zip_filename, "rb") as f:
+        zip_file_content = f.read()
+    zip_file_id = ds.put("file", zip_file_content, zip_filename)
+    logger.info(f"Uploaded zip file with ID {zip_file_id}")
+
+    # Generate the URL for the zip file
+    zip_file_url = ds.get_url(zip_file_id)
+    logger.info(f"Download URL for zip file: {zip_file_url}")
+    return zip_file_url
 
 
 # Functions for the SAM model
@@ -193,7 +212,7 @@ async def start_sam_annotation_server(data_url: str, path2data: str="./data", ou
         {
             "name": "Model Trainer",
             "id": "bioimageio-colab",
-            "config": {"visibility": "public"},
+            "config": {"visibility": "public", "run_in_executor": True},
             # Exposed functions:
             # get a random image from the dataset
             # returns the image as a numpy image
@@ -215,6 +234,7 @@ async def start_sam_annotation_server(data_url: str, path2data: str="./data", ou
             # pass the predictor-id the point coordinates and labels
             # returns the predicted mask encoded as geo json
             "segment": partial(segment, ds),
+            "download_labels": partial(download_labels, ds, outpath),
         }
     )
     sid = svc["id"]
@@ -227,6 +247,8 @@ async def start_sam_annotation_server(data_url: str, path2data: str="./data", ou
         + encoded_config
     )
     print(annotator_url)
+
+    print(f"To download the annotated labels, go to {server_url}/{server.config['workspace']}/services/{sid.split(':')[1]}/download_labels")
 
 
 if __name__ == "__main__":
