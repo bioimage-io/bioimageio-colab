@@ -18,7 +18,7 @@ pip install -r requirements.txt
 and run the BioEngine server setup for this:
 ```bash
 
-python -m bioimageio_colab.sam_annotation_server
+python -m bioimageio_colab.annotation_server
 ```
 
 Then go to the printed URL and start collaborative annotation.
