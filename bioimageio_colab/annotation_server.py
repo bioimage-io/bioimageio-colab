@@ -10,7 +10,6 @@ import shutil
 import torch
 from imjoy_rpc.hypha import connect_to_server
 from kaibu_utils import features_to_mask, mask_to_features
-from segment_anything import SamPredictor, sam_model_registry
 from tifffile import imread, imwrite
 
 from bioimageio_colab.hypha_data_store import HyphaDataStore
@@ -51,6 +50,8 @@ def get_sam_model(model_name):
     """
     Get the model from SAM / micro_sam for the given name.
     """
+    from segment_anything import sam_model_registry
+
     model_url = MODELS[model_name]
     checkpoint_path = f"{model_name}.pt"
 
@@ -99,6 +100,8 @@ def load_model(ds, model_name):
 
 
 def compute_embeddings(ds, sam_id, image):
+    from segment_anything import SamPredictor
+    
     logger.info(f"Computing embeddings for model {sam_id}...")
     sam = ds.get(sam_id)["value"]
     predictor = SamPredictor(sam)

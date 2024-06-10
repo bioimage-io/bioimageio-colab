@@ -1,0 +1,5 @@
+-r "requirements-colab.txt"
+segment_anything
+torch
+torchvision
+onnx
