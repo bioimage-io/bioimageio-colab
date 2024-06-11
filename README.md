@@ -13,7 +13,7 @@ We support using segment-anything model (SAM) to facilitate the annotation of im
 ```
 conda create -n bioimageio-colab python=3.11
 conda activate bioimageio-colab
-pip install -r requirements.txt
+pip install -r requirements-sam.txt
 ```
 and run the BioEngine server setup for this:
 ```bash
