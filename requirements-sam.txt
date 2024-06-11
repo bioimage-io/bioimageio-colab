@@ -1,4 +1,4 @@
--r "requirements-colab.txt"
+-r "requirements.txt"
 segment_anything
 torch
 torchvision
