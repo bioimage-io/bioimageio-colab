@@ -18,10 +18,10 @@ pip install -r requirements-sam.txt
 and run the BioEngine server setup for this:
 ```bash
 
-python -m bioimageio_colab.sam_server
+python -m bioimageio_colab.annotation_server
 ```
 
-Then go to https://imjoy.io/lite?plugin=https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/plugins/bioimageio-colab-sam.imjoy.html to start interactive annotation.
+Then go to the printed URL and start collaborative annotation.
 
 ### Building your own collaboratory annotation interface
 

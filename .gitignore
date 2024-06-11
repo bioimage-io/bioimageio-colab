@@ -15,3 +15,6 @@ data/
 .DS_Store
 *.onnx
 *.pt
+*tif
+*zip
+visualize_annotation.py
