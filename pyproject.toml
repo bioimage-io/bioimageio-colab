@@ -18,10 +18,10 @@ dependencies = [
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["bioimageio_colab*"]
+include = ["bioimageio_colab_server*"]
 exclude = ["tests*"]
 
 [options.entry_points]
 console_scripts = [
-    "bioimageio-colab = bioimageio_colab.__main__:main",
+    "bioimageio-colab = bioimageio_colab_server.__main__:main",
 ]
