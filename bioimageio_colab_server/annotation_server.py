@@ -143,12 +143,12 @@ async def start_server(
     )
     annotation_sid = svc["id"]
     model_sid = "oNwLbCSSNbiWrpr7h85F9f/ardFE2rx8wFB69JbbUGFfp:bioimageio-colab-model"
-    config_str = f'{{"server_url": "{server_url}", "model_service_id": {model_sid}, "annotation_service_id": "{annotation_sid}", "token": "{token}"}}'
+    config_str = f'{{"server_url": "{server_url}", "annotation_service_id": "{annotation_sid}", "model_service_id": "{model_sid}", "token": "{token}"}}'
     encoded_config = urllib.parse.quote(
         config_str, safe="/", encoding=None, errors=None
     )
     annotator_url = (
-        "https://imjoy.io/lite?plugin=https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/plugins/bioimageio-colab.imjoy.html&config="
+        "https://imjoy.io/lite?plugin=https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/kubernetes/plugins/bioimageio-colab-annotator.imjoy.html&config="
         + encoded_config
     )
     print("-" * 80)
