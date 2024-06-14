@@ -54,6 +54,8 @@ class BioImageIOColabAnnotator {
         // Connect to the Hypha server
         const server = await hyphaWebsocketClient.connectToServer({
             server_url: serverUrl,
+            token: config.token,
+            workspace: config.workspace,
         });
 
         // Get the bioimageio-colab service from the server
@@ -170,7 +172,7 @@ class BioImageIOColabAnnotator {
             elements: [
                 {
                     type: "button",
-                    label: "Next Image",
+                    label: "Save Annotation",
                     callback: nextImage,
                 }
             ],
