@@ -84,26 +84,29 @@ def download_labels(ds, data_folder):
 
 
 async def start_server(
-    data_url: str, path2data: str = "./data", outpath: str = "./kaibu_annotations"
+    path2data: str = "./data", outpath: str = "./kaibu_annotations", data_url: str = None,
 ):
     """
     Start the SAM annotation server.
 
     When multiple people open the link, they can join a common workspace as an ImJoy client
     """
-    # Check if the data is available
     path2data = os.path.abspath(path2data)
-    if not os.path.exists(path2data):
-        # Create the path
-        os.makedirs(path2data)
-        # Download the data
-        save_path = os.path.join(path2data, data_url.split("/")[-1])
-        download_zip(data_url, save_path)
-        # Unzip the data
-        unzip_file(save_path, path2data)
-        # Remove the zip file
-        os.remove(save_path)
-        logger.info(f"Removed {save_path}")
+    if data_url is not None:
+        # Check if the data is available
+        if not os.path.exists(path2data):
+            # Create the path
+            os.makedirs(path2data)
+            # Download the data
+            save_path = os.path.join(path2data, data_url.split("/")[-1])
+            download_zip(data_url, save_path)
+            # Unzip the data
+            unzip_file(save_path, path2data)
+            # Remove the zip file
+            os.remove(save_path)
+            logger.info(f"Removed {save_path}")
+        else:
+            logger.info(f"Data already exists at {path2data}")
 
     # Create the output paths
     path2source = os.path.abspath(os.path.join(outpath, "source"))

@@ -7,3 +7,4 @@ matplotlib
 imjoy-jupyterlab-extension
 kaibu-utils
 jupyterlab
+pydantic
