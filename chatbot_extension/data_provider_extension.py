@@ -4,14 +4,14 @@ from imjoy_rpc.hypha import login, connect_to_server
 from bioimageio_colab_server.annotation_server import start_server
     
 class RegisterService(BaseModel):
-    """Register collaborative annotation service to start a collaborative annotation session."""
+    """Register collaborative annotation service to start a collaborative annotation session. Returns the URL for the annotation server."""
     path2data: str = Field(..., description="Path to data folder from which the images are loaded; example: /mnt/data")
     outpath: str = Field(..., description="Path to output folder to which the annotations are saved; example: /mnt/annotations")
 
 
 async def register_service(kwargs):
-    await start_server(**kwargs)
-    return "success"
+    annotator_url = await start_server(**kwargs)
+    return f"Annotation server is running at: {annotator_url}"
 
 
 def get_schema():
