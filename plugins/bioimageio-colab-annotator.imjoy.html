@@ -14,8 +14,7 @@
   "env": "",
   "permissions": [],
   "requirements": [
-    "https://cdn.jsdelivr.net/npm/imjoy-rpc@0.5.6/dist/hypha-rpc-websocket.min.js",
-    "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"
+    "https://cdn.jsdelivr.net/npm/imjoy-rpc@0.5.6/dist/hypha-rpc-websocket.min.js"
   ],
   "dependencies": []
 }
@@ -31,6 +30,8 @@ class BioImageIOColabAnnotator {
         this.imageLayer = null; // Layer displaying the image
         this.annotationLayer = null; // Layer displaying the annotations
         this.edgeColor = "magenta"; // Default edge color for annotations
+        this.modelName = "vit_b"; // Model name for the embeddings
+        this.embeddingIsCalculated = false; // Flag to check if embeddings are calculated
     }
 
     async setup() {
@@ -40,27 +41,43 @@ class BioImageIOColabAnnotator {
     async run(ctx) {
         // Extract configuration settings
         const config = ctx.config || {};
-        const serviceId = config.service_id || "bioimageio-colab";
         const serverUrl = config.server_url || "https://ai.imjoy.io";
-
+        const annotationServiceId = config.annotation_service_id || "bioimageio-colab-annotation";  // default for testing plugin
+        const modelServiceId = config.model_service_id || "oNwLbCSSNbiWrpr7h85F9f/ardFE2rx8wFB69JbbUGFfp:bioimageio-colab-model";  // default for testing plugin
+        
         // Create and display the viewer window
         const viewer = await api.createWindow({src: "https://kaibu.org/#/app", fullscreen: true});
         await api.showMessage(`Connecting to server ${serverUrl}....`);
-        
+        // Login before connecting and then use userid instead of new client_id
+        // TODO: Add login functionality
+
+        // Connect to the Hypha server
+        const server = await hyphaWebsocketClient.connectToServer({
+            server_url: serverUrl,
+            token: config.token,
+            workspace: config.workspace,
+        });
+
+        // Get the bioimageio-colab service from the server
+        let biocolab;
         try {
-            // Connect to the Hypha server
-            const server = await hyphaWebsocketClient.connectToServer({
-                server_url: serverUrl, 
-                token: config.token, 
-                workspace: config.workspace
-            });
-            // Get the bioimageio-colab service from the server
-            this.biocolab = await server.getService(serviceId);
+            biocolab = await server.getService(annotationServiceId);
         } catch (e) {
-            // Alert if the connection to the service fails
-            await api.alert(`Failed to get the bioimageio-colab service (id=${serviceId}), please make sure you started the server.`);
+            await api.alert(`Failed to get the bioimageio-colab annotation service (id=${annotationServiceId}). (Error: ${e})`);
             return;
         }
+
+        // Get the model service from the server
+        let model;
+        try {
+            model = await server.getService(modelServiceId);
+        } catch (e) {
+            await api.alert(`Failed to get the bioimageio-colab model service (id=${modelServiceId}). (Error: ${e})`);
+            return;
+        }
+
+        // Get an annotator client ID
+        const clientID = await model.client_id();
 
         // Function to get a new image and set up the viewer
         const getImage = async () => {
@@ -71,11 +88,12 @@ class BioImageIOColabAnnotator {
             }
 
             // Fetch a random image from the service
-            [this.image, this.filename, this.newname] = await this.biocolab.get_random_image();
+            [this.image, this.filename, this.newname] = await biocolab.get_random_image();
             this.imageLayer = await viewer.view_image(this.image, {name: "image"});
 
             // Reset the predictorId for the new image
-            this.predictorId = null;
+            this.embeddingIsCalculated = false;
+            await model.reset_embedding(clientID);
 
             // Add the annotation functionality to the interface
             this.annotationLayer = await viewer.add_shapes([], {
@@ -90,21 +108,21 @@ class BioImageIOColabAnnotator {
                         const pointCoords = [shape.geometry.coordinates.reverse()];
                         const pointLabels = pointCoords.map(() => 1); // All points have a label of 1
 
-                        // Load the model if not already loaded
-                        if (!this.modelId) {
-                            api.showMessage("Loading the model...");
-                            this.modelId = await this.biocolab.load_model("vit_b");
-                        }
-
                         // Compute embeddings if not already computed for the image
-                        if (!this.predictorId) {
+                        if (!this.embeddingIsCalculated) {
                             api.showMessage("Computing embeddings for the image...");
-                            this.predictorId = await this.biocolab.compute_embeddings(this.modelId, this.image);
+                            try {
+                                await model.compute_embedding(clientID, this.modelName, this.image);
+                            } catch (e) {
+                                await api.showMessage(`Failed to compute embeddings for the image. (Error: ${e})`);
+                                return;
+                            }
+                            this.embeddingIsCalculated = true;
                         }
 
                         // Perform segmentation
                         api.showMessage("Segmenting...");
-                        const features = await this.biocolab.segment(this.predictorId, pointCoords, pointLabels);
+                        const features = await model.segment(clientID, pointCoords, pointLabels);
 
                         // Add the segmented features as polygons to the annotation layer
                         for (let coords of features) {
@@ -124,9 +142,6 @@ class BioImageIOColabAnnotator {
                             this.annotationLayer.add_feature(polygon);
                         }
                     }
-                    //else if (shape.geometry.type !== "Polygon") {
-                    //    api.showMessage(`'${shape.geometry.type}' is not supported yet.`);
-                    //}
                 }
             });
         };
@@ -136,7 +151,7 @@ class BioImageIOColabAnnotator {
             if (!this.annotationLayer) return;
             const annotation = await this.annotationLayer.get_features();
             if (annotation.features.length > 0) {
-                await this.biocolab.save_annotation(this.filename, this.newname, annotation, [this.image._rshape[0], this.image._rshape[1]]);
+                await biocolab.save_annotation(this.filename, this.newname, annotation, [this.image._rshape[0], this.image._rshape[1]]);
                 await api.showMessage(`Annotation Saved to ${this.filename}`);
             } else {
                 await api.showMessage("Skip saving annotation");
@@ -157,7 +172,7 @@ class BioImageIOColabAnnotator {
             elements: [
                 {
                     type: "button",
-                    label: "Next Image",
+                    label: "Save Annotation",
                     callback: nextImage,
                 }
             ],
@@ -172,3 +187,4 @@ class BioImageIOColabAnnotator {
 // Export the annotator class
 api.export(new BioImageIOColabAnnotator());
 </script>
+

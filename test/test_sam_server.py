@@ -3,8 +3,8 @@ import sys
 import unittest
 
 import numpy as np
-from bioimageio_colab.sam_server import get_sam_model, export_onnx_model, compute_embeddings, get_example_image, segment
-from bioimageio_colab.hypha_data_store import HyphaDataStore
+from bioimageio_colab_server.sam_server import get_sam_model, export_onnx_model, compute_embeddings, get_example_image, segment
+from bioimageio_colab_server.hypha_data_store import HyphaDataStore
 
 ds = HyphaDataStore()
 

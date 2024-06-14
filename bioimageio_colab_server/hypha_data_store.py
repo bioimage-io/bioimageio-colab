@@ -28,8 +28,9 @@ class HyphaDataStore:
         assert obj_id in self.storage, "Object not found " + obj_id
         return f"{self._server.config.public_base_url}/{self._server.config.workspace}/apps/{self._svc.id.split(':')[1]}/get?id={obj_id}"
 
-    def put(self, obj_type: str, value: any, name: str, comment: str = ""):
-        obj_id = str(uuid.uuid4())
+    def put(self, obj_type: str, value: any, name: str, comment: str = "", obj_id = None):
+        if obj_id is None:
+            obj_id = str(uuid.uuid4())
         if obj_type == 'file':
             data = value
             assert isinstance(data, (str, bytes)), "Value must be a string or bytes"
