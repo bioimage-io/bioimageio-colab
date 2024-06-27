@@ -9,12 +9,12 @@ RUN pip install --upgrade pip
 
 # Install the required Python packages
 RUN pip install numpy==1.26.4 \
-                imjoy-rpc==0.5.48.post2 \
-                requests==2.31.0 \
-                kaibu-utils==0.1.14 \
-                segment_anything \
-                torch \
-                torchvision
+    imjoy-rpc==0.5.48.post2 \
+    requests==2.31.0 \
+    kaibu-utils==0.1.14 \
+    segment_anything \
+    torch \
+    torchvision
 
 # Copy the bioimageio-colab folder to the docker environment
 COPY . /app/bioimageio-colab/.
@@ -23,4 +23,4 @@ COPY . /app/bioimageio-colab/.
 RUN pip install -e bioimageio-colab
 
 # Run the bioimageio_colab_server model server
-ENTRYPOINT ["python", "-m", "bioimageio_colab_server.model_server"]
+ENTRYPOINT ["python", "-m", "bioimageio_colab.segmentation_server"]

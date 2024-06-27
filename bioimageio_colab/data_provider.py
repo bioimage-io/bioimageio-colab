@@ -11,7 +11,7 @@ from imjoy_rpc.hypha import connect_to_server
 from kaibu_utils import features_to_mask
 from tifffile import imread, imwrite
 
-from bioimageio_colab_server.hypha_data_store import HyphaDataStore
+from bioimageio_colab.hypha_data_store import HyphaDataStore
 
 logger = getLogger(__name__)
 logger.setLevel("INFO")

@@ -2,7 +2,6 @@ import os
 from logging import getLogger
 import uuid
 from typing import Union
-import json
 
 import numpy as np
 import requests
@@ -23,11 +22,11 @@ MODELS = {
 STORAGE = {}
 
 
-def client_id() -> str:
-    client_id = str(uuid.uuid4())
-    STORAGE[client_id] = {}
-    logger.info(f"Generated user ID: {client_id}")
-    return client_id
+# def client_id() -> str:
+#     client_id = str(uuid.uuid4())
+#     STORAGE[client_id] = {}
+#     logger.info(f"Generated user ID: {client_id}")
+#     return client_id
 
 
 def remove_client_id(client_id: str) -> bool:
@@ -147,28 +146,59 @@ def segment(
     return features
 
 
-async def start_server():
+async def start_server(server_url="https://ai.imjoy.io"):
     """
     Start the SAM annotation server.
 
     When multiple people open the link, they can join a common workspace as an ImJoy client
     """
+    # Login to Hypha
+    user_token = os.getenv("USER_TOKEN") or None
 
-    config = os.path.join(os.path.dirname(__file__), "service_config.json")
-    with open(config, "r") as f:
-        server_url = json.load(f).get("server_url", "https://ai.imjoy.io")
+    # Connect to the Hypha server
+    workspace_admin = await connect_to_server(
+        {"server_url": server_url, "token": user_token}
+    )
 
-    server = await connect_to_server({"server_url": server_url})
+    # Create the bioimageio-colab workspace
+    colab_ws = await workspace_admin.create_workspace(
+        {
+            "name": "bioimageio-colab",
+            "description": "The BioImageIO Colab workspace for serving interactive segmentation models.",
+            "owners": [],
+            "allow_list": [],
+            "deny_list": [],
+            "visibility": "public",  # public/protected
+        },
+        overwrite=True,
+    )
 
-    svc = await server.register_service(
+    # Generate a token for the my-test-workspace
+    colab_token = user_token or await workspace_admin.generate_token(
+        {"scopes": ["bioimageio-colab"]}
+    )
+
+    # Connect to the new workspace
+    colab = await connect_to_server(
+        {
+            "server_url": server_url,
+            "workspace": "bioimageio-colab",
+            "client_id": "workspace-manager",
+            "name": "Interactive Segmentation",
+            "token": colab_token,
+        }
+    )
+
+    # Register a new service
+    service_info = await colab.register_service(
         {
             "name": "Interactive Segmentation",
-            "id": "bioimageio-colab-model",
+            "id": "interactive-segmentation",
             "config": {"visibility": "public", "run_in_executor": True},
             # Exposed functions:
             # get a user id
             # returns a unique user id
-            "client_id": client_id,
+            #// "client_id": client_id,
             # compute the image embeddings:
             # pass the client-id, model-name and the image to compute the embeddings on
             # calls load_model internally
@@ -183,16 +213,15 @@ async def start_server():
             "reset_embedding": reset_embedding,
             # remove the client id
             # pass the client-id to remove
-            "remove_client_id": remove_client_id,
+            "remove_client_id": remove_client_id,  # TODO: add a timeout to remove the client id
         }
     )
-    sid = svc["id"]
-
-    # Save server_url and sid in model_server.json
-    with open(config, "w") as f:
-        f.write(json.dumps({"server_url": server_url, "sid": sid}))
-
+    sid = service_info["id"]
+    assert sid == "bioimageio-colab/workspace-manager:interactive-segmentation"
     logger.info(f"Registered service with ID: {sid}")
+
+    # Test if the service can be retrieved from another workspace
+    assert await workspace_admin.get_service(sid)
 
     # print("Test the server on the following link:")
     # print(

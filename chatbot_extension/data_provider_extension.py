@@ -1,7 +1,7 @@
 import asyncio
 from pydantic import BaseModel, Field
 from imjoy_rpc.hypha import login, connect_to_server
-from bioimageio_colab_server.annotation_server import start_server
+from bioimageio_colab.data_provider import start_server
     
 class RegisterService(BaseModel):
     """Register collaborative annotation service to start a collaborative annotation session. Returns the URL for the annotation server."""
