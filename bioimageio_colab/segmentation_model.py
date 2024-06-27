@@ -1,37 +1,24 @@
 import os
 from logging import getLogger
-import uuid
 from typing import Union
 
 import numpy as np
 import requests
 import torch
-from imjoy_rpc.hypha import login, connect_to_server
+from imjoy_rpc.hypha import connect_to_server
 from kaibu_utils import mask_to_features
 from segment_anything import sam_model_registry, SamPredictor
 
 logger = getLogger(__name__)
 logger.setLevel("INFO")
 
+SERVER_URL = "https://ai.imjoy.io"
 MODELS = {
     "vit_b": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",
     "vit_b_lm": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/diplomatic-bug/1/files/vit_b.pt",
     "vit_b_em_organelles": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/noisy-ox/1/files/vit_b.pt",
 }
-
 STORAGE = {}
-
-
-# def client_id() -> str:
-#     client_id = str(uuid.uuid4())
-#     STORAGE[client_id] = {}
-#     logger.info(f"Generated user ID: {client_id}")
-#     return client_id
-
-
-def remove_client_id(client_id: str) -> bool:
-    assert client_id in STORAGE, f"User {client_id} not found"
-    del STORAGE[client_id]
 
 
 def _get_sam_model(model_name: str) -> torch.nn.Module:
@@ -94,8 +81,9 @@ def _to_image(input_: np.ndarray) -> np.ndarray:
     return image
 
 
-def compute_embedding(client_id: str, model_name: str, image: np.ndarray) -> None:
-    assert client_id in STORAGE, f"User {client_id} not found"
+def compute_embedding(
+    user_id: str, model_name: str, image: np.ndarray, context: dict = None
+) -> None:
     sam = _load_model(model_name)
     logger.info(f"Computing embeddings for model {model_name}...")
     predictor = SamPredictor(sam)
@@ -108,26 +96,25 @@ def compute_embedding(client_id: str, model_name: str, image: np.ndarray) -> Non
         "features": predictor.features,  # embedding
         "is_image_set": predictor.is_image_set,
     }
-    STORAGE[client_id] = predictor_dict
-    logger.info(f"Caching embedding for user {client_id}")
+    STORAGE[user_id] = predictor_dict
+    logger.info(f"Caching embedding for user {user_id}")
 
 
-def reset_embedding(client_id: str) -> bool:
-    assert client_id in STORAGE, f"User {client_id} not found"
-    STORAGE[client_id] = {}
+def reset_embedding(user_id: str, context: dict = None) -> bool:
+    STORAGE[user_id] = {}
 
 
 def segment(
-    client_id: str,
+    user_id: str,
     point_coordinates: Union[list, np.ndarray],
     point_labels: Union[list, np.ndarray],
+    context: dict = None,
 ) -> list:
-    assert client_id in STORAGE, f"User {client_id} not found"
-    logger.info(f"Segmenting with embedding from user {client_id}...")
+    logger.info(f"Segmenting with embedding from user {user_id}...")
     # Load the model with the pre-computed embedding
-    sam = _load_model(STORAGE[client_id].get("model_name"))
+    sam = _load_model(STORAGE[user_id].get("model_name"))
     predictor = SamPredictor(sam)
-    for key, value in STORAGE[client_id].items():
+    for key, value in STORAGE[user_id].items():
         if key != "model_name":
             setattr(predictor, key, value)
     # Run the segmentation
@@ -146,59 +133,56 @@ def segment(
     return features
 
 
-async def start_server(server_url="https://ai.imjoy.io"):
-    """
-    Start the SAM annotation server.
+def remove_user_id(user_id: str, context: dict = None) -> bool:
+    del STORAGE[user_id]
 
-    When multiple people open the link, they can join a common workspace as an ImJoy client
-    """
-    # Login to Hypha
-    user_token = os.getenv("USER_TOKEN") or None
 
+async def register_service():
+    """
+    Register the SAM annotation service on the BioImageIO Colab workspace.
+    """
     # Connect to the Hypha server
-    workspace_admin = await connect_to_server(
-        {"server_url": server_url, "token": user_token}
+    token = os.getenv("USER_TOKEN")
+    workspace_owner = await connect_to_server(
+        {"server_url": SERVER_URL, "token": token}
     )
 
     # Create the bioimageio-colab workspace
-    colab_ws = await workspace_admin.create_workspace(
+    await workspace_owner.create_workspace(
         {
             "name": "bioimageio-colab",
             "description": "The BioImageIO Colab workspace for serving interactive segmentation models.",
-            "owners": [],
+            "owners": [],  # user ID of workspace owner is added automatically
             "allow_list": [],
             "deny_list": [],
             "visibility": "public",  # public/protected
+            "persistent": False,  # can not be persistent for anonymous users
         },
-        overwrite=True,
-    )
-
-    # Generate a token for the my-test-workspace
-    colab_token = user_token or await workspace_admin.generate_token(
-        {"scopes": ["bioimageio-colab"]}
+        overwrite=True,  # overwrite if the workspace already exists
     )
 
     # Connect to the new workspace
-    colab = await connect_to_server(
+    colab_client = await connect_to_server(
         {
-            "server_url": server_url,
+            "server_url": SERVER_URL,
             "workspace": "bioimageio-colab",
-            "client_id": "workspace-manager",
-            "name": "Interactive Segmentation",
-            "token": colab_token,
+            "client_id": "model-server",
+            "name": "Model Server",
+            "token": token,
         }
     )
 
     # Register a new service
-    service_info = await colab.register_service(
+    service_info = await colab_client.register_service(
         {
             "name": "Interactive Segmentation",
             "id": "interactive-segmentation",
-            "config": {"visibility": "public", "run_in_executor": True},
+            "config": {
+                "visibility": "public",
+                "require_context": True,  # TODO: only allow the service to be called by logged-in users
+                "run_in_executor": True,
+            },
             # Exposed functions:
-            # get a user id
-            # returns a unique user id
-            #// "client_id": client_id,
             # compute the image embeddings:
             # pass the client-id, model-name and the image to compute the embeddings on
             # calls load_model internally
@@ -213,20 +197,16 @@ async def start_server(server_url="https://ai.imjoy.io"):
             "reset_embedding": reset_embedding,
             # remove the client id
             # pass the client-id to remove
-            "remove_client_id": remove_client_id,  # TODO: add a timeout to remove the client id
-        }
+            "remove_user_id": remove_user_id,  # TODO: add a timeout to remove the client id
+        },
+        overwrite=True,
     )
     sid = service_info["id"]
-    assert sid == "bioimageio-colab/workspace-manager:interactive-segmentation"
+    assert sid == "bioimageio-colab/model-server:interactive-segmentation"
     logger.info(f"Registered service with ID: {sid}")
 
     # Test if the service can be retrieved from another workspace
-    assert await workspace_admin.get_service(sid)
-
-    # print("Test the server on the following link:")
-    # print(
-    #     f"{server_url}/{server.config['workspace']}/services/{sid.split(':')[1]}/client_id"
-    # )
+    assert await workspace_owner.get_service(sid)
 
 
 if __name__ == "__main__":
@@ -235,15 +215,18 @@ if __name__ == "__main__":
     logger.setLevel("DEBUG")
 
     loop = asyncio.get_event_loop()
-    loop.create_task(start_server())
-
+    loop.create_task(register_service())
     loop.run_forever()
 
     # from imjoy_rpc.hypha.sync import connect_to_server
+    # import numpy as np
     # server = connect_to_server({"server_url": "https://ai.imjoy.io"})
-    # sid = "..."
-    # biocolab = server.getService(sid)
-    # id = biocolab.client_id()
+    # biocolab = server.getService(
+    #     "bioimageio-colab/model-server:interactive-segmentation"
+    # )
+    # info = server.getConnectionInfo()
+    # id = info.user_info.id
     # biocolab.compute_embedding(id, "vit_b", np.random.rand(256, 256))
     # features = biocolab.segment(id, [[128, 128]], [1])
     # print(features)
+    # biocolab.remove_user_id(id)

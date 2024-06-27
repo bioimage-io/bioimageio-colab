@@ -1,9 +1,6 @@
 # Use an image with Python 3.11
 FROM python:3.11-slim
 
-# Set the working directory
-WORKDIR /app
-
 # Upgrade pip
 RUN pip install --upgrade pip
 
@@ -19,8 +16,11 @@ RUN pip install numpy==1.26.4 \
 # Copy the bioimageio-colab folder to the docker environment
 COPY . /app/bioimageio-colab/.
 
-# Install bioimageio_colab_server as a module
-RUN pip install -e bioimageio-colab
+# Set the working directory
+WORKDIR /app/bioimageio-colab/
 
-# Run the bioimageio_colab_server model server
-ENTRYPOINT ["python", "-m", "bioimageio_colab.segmentation_server"]
+# Install bioimageio_colab as a module
+RUN pip install -e .
+
+# Run the bioimageio_colab model service
+ENTRYPOINT ["python", "-m", "bioimageio_colab.segmentation_model"]
