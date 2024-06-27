@@ -84,7 +84,9 @@ def download_labels(ds, data_folder):
 
 
 async def start_server(
-    path2data: str = "./data", outpath: str = "./kaibu_annotations", data_url: str = None,
+    path2data: str = "./data",
+    outpath: str = "./kaibu_annotations",
+    data_url: str = None,
 ):
     """
     Start the SAM annotation server.
@@ -130,7 +132,10 @@ async def start_server(
         {
             "name": "Collaborative Annotation",
             "id": "bioimageio-colab-annotation",
-            "config": {"visibility": "public", "run_in_executor": True},  # make protected
+            "config": {
+                "visibility": "public",  # TODO: make protected
+                "run_in_executor": True,
+            },
             # Exposed functions:
             # get a random image from the dataset
             # returns the image as a numpy image
@@ -145,13 +150,12 @@ async def start_server(
         }
     )
     annotation_sid = svc["id"]
-    model_sid = "oNwLbCSSNbiWrpr7h85F9f/ardFE2rx8wFB69JbbUGFfp:bioimageio-colab-model"
-    config_str = f'{{"server_url": "{server_url}", "annotation_service_id": "{annotation_sid}", "model_service_id": "{model_sid}", "token": "{token}"}}'
+    config_str = f'{{"server_url": "{server_url}", "annotation_service_id": "{annotation_sid}", "token": "{token}"}}'
     encoded_config = urllib.parse.quote(
         config_str, safe="/", encoding=None, errors=None
     )
     annotator_url = (
-        "https://imjoy.io/lite?plugin=https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/kubernetes/plugins/bioimageio-colab-annotator.imjoy.html&config="
+        "https://imjoy.io/lite?plugin=https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/chatbot_extension/plugins/bioimageio-colab-annotator.imjoy.html&config="
         + encoded_config
     )
     print("-" * 80)
