@@ -158,7 +158,7 @@ async def register_service():
             "visibility": "public",  # public/protected
             "persistent": False,  # can not be persistent for anonymous users
         },
-        overwrite=True,  # overwrite if the workspace already exists
+        overwrite=False,  # overwrite if the workspace already exists
     )
 
     # Connect to the new workspace
