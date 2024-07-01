@@ -168,6 +168,8 @@ async def start_server(
     )
     print("-" * 80)
 
+    return annotator_url
+
 
 if __name__ == "__main__":
     import asyncio
