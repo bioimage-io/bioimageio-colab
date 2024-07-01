@@ -84,6 +84,9 @@ def _to_image(input_: np.ndarray) -> np.ndarray:
 def compute_embedding(
     user_id: str, model_name: str, image: np.ndarray, context: dict = None
 ) -> None:
+    if user_id not in STORAGE:
+        logger.info(f"User {user_id} not found in storage.")
+        return
     sam = _load_model(model_name)
     logger.info(f"Computing embeddings for model {model_name}...")
     predictor = SamPredictor(sam)
@@ -101,7 +104,10 @@ def compute_embedding(
 
 
 def reset_embedding(user_id: str, context: dict = None) -> bool:
-    STORAGE[user_id] = {}
+    if user_id not in STORAGE:
+        logger.info(f"User {user_id} not found in storage.")
+    else:
+        STORAGE[user_id].clear()
 
 
 def segment(
@@ -110,6 +116,10 @@ def segment(
     point_labels: Union[list, np.ndarray],
     context: dict = None,
 ) -> list:
+    if user_id not in STORAGE:
+        logger.info(f"User {user_id} not found in storage.")
+        return
+    
     logger.info(f"Segmenting with embedding from user {user_id}...")
     # Load the model with the pre-computed embedding
     sam = _load_model(STORAGE[user_id].get("model_name"))
@@ -134,7 +144,10 @@ def segment(
 
 
 def remove_user_id(user_id: str, context: dict = None) -> bool:
-    del STORAGE[user_id]
+    if user_id not in STORAGE:
+        logger.info(f"User {user_id} not found in storage.")
+    else:
+        del STORAGE[user_id]
 
 
 async def register_service():
@@ -158,7 +171,7 @@ async def register_service():
             "visibility": "public",  # public/protected
             "persistent": False,  # can not be persistent for anonymous users
         },
-        overwrite=False,  # overwrite if the workspace already exists
+        overwrite=True,  # overwrite if the workspace already exists
     )
 
     # Connect to the new workspace
