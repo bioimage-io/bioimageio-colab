@@ -1,3 +1,4 @@
+import argparse
 import os
 from logging import getLogger
 from typing import Union
@@ -7,7 +8,7 @@ import requests
 import torch
 from imjoy_rpc.hypha import connect_to_server
 from kaibu_utils import mask_to_features
-from segment_anything import sam_model_registry, SamPredictor
+from segment_anything import SamPredictor, sam_model_registry
 
 logger = getLogger(__name__)
 logger.setLevel("INFO")
@@ -119,7 +120,7 @@ def segment(
     if user_id not in STORAGE:
         logger.info(f"User {user_id} not found in storage.")
         return
-    
+
     logger.info(f"Segmenting with embedding from user {user_id}...")
     # Load the model with the pre-computed embedding
     sam = _load_model(STORAGE[user_id].get("model_name"))
@@ -150,12 +151,20 @@ def remove_user_id(user_id: str, context: dict = None) -> bool:
         del STORAGE[user_id]
 
 
-async def register_service():
+async def register_service(token: str, client_id: str, service_id: str):
     """
     Register the SAM annotation service on the BioImageIO Colab workspace.
     """
+    if isinstance(token, str) and len(token) == 0:
+        raise ValueError("Token is required to connect to the Hypha server.")
+
+    if isinstance(client_id, str) and len(client_id) == 0:
+        raise ValueError("Client ID is required to register the service.")
+
+    if isinstance(service_id, str) and len(service_id) == 0:
+        raise ValueError("Service ID is required to register the service.")
+
     # Connect to the Hypha server
-    token = os.getenv("USER_TOKEN")
     workspace_owner = await connect_to_server(
         {"server_url": SERVER_URL, "token": token}
     )
@@ -179,7 +188,7 @@ async def register_service():
         {
             "server_url": SERVER_URL,
             "workspace": "bioimageio-colab",
-            "client_id": "model-server",
+            "client_id": client_id,
             "name": "Model Server",
             "token": token,
         }
@@ -189,7 +198,7 @@ async def register_service():
     service_info = await colab_client.register_service(
         {
             "name": "Interactive Segmentation",
-            "id": "interactive-segmentation",
+            "id": service_id,
             "config": {
                 "visibility": "public",
                 "require_context": True,  # TODO: only allow the service to be called by logged-in users
@@ -225,10 +234,34 @@ async def register_service():
 if __name__ == "__main__":
     import asyncio
 
+    parser = argparse.ArgumentParser(
+        description="Register SAM annotation service on BioImageIO Colab workspace."
+    )
+    parser.add_argument(
+        "--token", required=True, help="Token for connecting to the Hypha server"
+    )
+    parser.add_argument(
+        "--client_id",
+        required=False,
+        help="Client ID for registering the service",
+        default="model-server",
+    )
+    parser.add_argument(
+        "--service_id",
+        required=False,
+        help="Service ID for registering the service",
+        default="interactive-segmentation",
+    )
+    args = parser.parse_args()
+
     logger.setLevel("DEBUG")
 
     loop = asyncio.get_event_loop()
-    loop.create_task(register_service())
+    loop.create_task(
+        register_service(
+            token=args.token, client_id=args.client_id, service_id=args.service_id
+        )
+    )
     loop.run_forever()
 
     # from imjoy_rpc.hypha.sync import connect_to_server

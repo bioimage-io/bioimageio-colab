@@ -8,3 +8,4 @@ services:
     image: bioimageio-colab-segmentation:latest
     env_file:
       - .env
+    command: ["--token", "${HYPHA_TOKEN}"]

@@ -10,7 +10,7 @@ def main():
     # Save the token to a .env file
     file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
     with open(file_path, "w") as env_file:
-        env_file.write(f'USER_TOKEN="{token}"')
+        env_file.write(f'HYPHA_TOKEN="{token}"')
 
     # Define the permission mode for read and write for the owner only
     mode = 0o600
