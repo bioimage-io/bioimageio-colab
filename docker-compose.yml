@@ -1,10 +1,10 @@
 version: '3.9'
 
 services:
-  bioimageio-colab:
+  interactive-segmentation:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    image: bioimageio-colab-model:latest
-    environment:
-      USER_TOKEN: ${USER_TOKEN}
+    image: bioimageio-colab-segmentation:latest
+    env_file:
+      - .env

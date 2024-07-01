@@ -13,14 +13,11 @@ RUN pip install numpy==1.26.4 \
     torch \
     torchvision
 
-# Copy the bioimageio-colab folder to the docker environment
-COPY . /app/bioimageio-colab/.
-
 # Set the working directory
-WORKDIR /app/bioimageio-colab/
+WORKDIR /app/
 
-# Install bioimageio_colab as a module
-RUN pip install -e .
+# Copy the python script to the docker environment
+COPY ./bioimageio_colab/segmentation_model.py /app/segmentation_model.py
 
-# Run the bioimageio_colab model service
-ENTRYPOINT ["python", "-m", "bioimageio_colab.segmentation_model"]
+# Register the segmentation model as a hypha service
+ENTRYPOINT ["python", "segmentation_model.py"]
