@@ -22,7 +22,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.USER_TOKEN }}  # Requires `gh secret set USER_TOKEN` to be set
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image (latest tag)
         uses: docker/build-push-action@v5.0.0
