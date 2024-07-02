@@ -5,7 +5,7 @@ from imjoy_rpc.hypha.sync import connect_to_server
 
 
 def test_get_service():
-    client = connect_to_server({"server_url": "https://ai.imjoy.io"})
+    client = connect_to_server({"server_url": "https://ai.imjoy.io", "method_timeout": 5})
     assert client
 
     service = client.getService("bioimageio-colab/model-server:interactive-segmentation")

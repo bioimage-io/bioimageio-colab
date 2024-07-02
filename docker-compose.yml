@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    image: bioimageio-colab-segmentation:latest
+    image: ghcr.io/bioimage-io/bioimageio-colab:latest
     env_file:
       - .env
     command: ["--token", "${HYPHA_TOKEN}"]
