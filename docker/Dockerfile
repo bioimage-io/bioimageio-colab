@@ -34,5 +34,3 @@ USER bioimageio_colab
 # --client_id <client_id>: Client ID for registering the service. Default is "model-server"
 # --service_id <service_id>: Service ID for registering the service. Default is "interactive-segmentation"
 ENTRYPOINT ["python", "segmentation_model.py"]
-
-LABEL org.opencontainers.image.source https://github.com/bioimage-io/bioimageio-colab
