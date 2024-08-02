@@ -41,7 +41,7 @@ class BioImageIOColabAnnotator {
     async run(ctx) {
         // Extract configuration settings
         const config = ctx.config || {};
-        const serverUrl = config.server_url || "https://ai.imjoy.io";
+        const serverUrl = config.server_url || "https://hypha.aicell.io";
         const annotationServiceId = config.annotation_service_id || "bioimageio-colab-annotation";  // default for testing plugin
         const modelServiceId = "bioimageio-colab/model-server:interactive-segmentation"
         

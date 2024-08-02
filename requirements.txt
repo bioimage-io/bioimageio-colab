@@ -1,5 +1,6 @@
 numpy==1.26.4
-imjoy-rpc==0.5.48.post2
+hypha-rpc==0.1.12
+# hypha==0.20.1b2
 requests==2.31.0
 kaibu-utils==0.1.14
 tifffile

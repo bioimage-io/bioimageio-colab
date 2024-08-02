@@ -7,7 +7,7 @@ from logging import getLogger
 import numpy as np
 import requests
 import shutil
-from imjoy_rpc.hypha import connect_to_server
+from hypha_rpc.hypha import connect_to_server
 from kaibu_utils import features_to_mask
 from tifffile import imread, imwrite
 
@@ -91,7 +91,7 @@ async def start_server(
     """
     Start the SAM annotation server.
 
-    When multiple people open the link, they can join a common workspace as an ImJoy client
+    When multiple people open the link, they can join a common workspace as an hypha client
     """
     path2data = os.path.abspath(path2data)
     if data_url is not None:
@@ -117,7 +117,7 @@ async def start_server(
     os.makedirs(path2label, exist_ok=True)
 
     # Connect to the server link
-    server_url = "https://ai.imjoy.io"
+    server_url = "https://hypha.aicell.io"
     server = await connect_to_server({"server_url": server_url})
 
     # Upload to hypha.

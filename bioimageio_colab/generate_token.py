@@ -1,11 +1,11 @@
 import os
 
-from imjoy_rpc.hypha.sync import login
+from hypha_rpc.hypha.sync import login
 
 
 def main():
     # Login to hypha
-    token = login({"server_url": "https://ai.imjoy.io"})
+    token = login({"server_url": "https://hypha.aicell.io"})
 
     # Save the token to a .env file
     file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")

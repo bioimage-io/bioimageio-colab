@@ -6,14 +6,14 @@ from typing import Union
 import numpy as np
 import requests
 import torch
-from imjoy_rpc.hypha import connect_to_server
+from hypha_rpc.hypha import connect_to_server
 from kaibu_utils import mask_to_features
 from segment_anything import SamPredictor, sam_model_registry
 
 logger = getLogger(__name__)
 logger.setLevel("INFO")
 
-SERVER_URL = "https://ai.imjoy.io"
+SERVER_URL = "https://hypha.aicell.io"
 MODELS = {
     "vit_b": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",
     "vit_b_lm": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/diplomatic-bug/1/files/vit_b.pt",
@@ -264,9 +264,9 @@ if __name__ == "__main__":
     )
     loop.run_forever()
 
-    # from imjoy_rpc.hypha.sync import connect_to_server
+    # from hypha_rpc.hypha.sync import connect_to_server
     # import numpy as np
-    # server = connect_to_server({"server_url": "https://ai.imjoy.io"})
+    # server = connect_to_server({"server_url": "https://hypha.aicell.io"})
     # biocolab = server.getService(
     #     "bioimageio-colab/model-server:interactive-segmentation"
     # )

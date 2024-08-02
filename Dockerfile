@@ -1,23 +1,24 @@
 # Use an image with Python 3.11
 FROM python:3.11-slim
 
+# Set the working directory
+WORKDIR /app/
+
 # Create a non-root user
 RUN groupadd -r bioimageio_colab && useradd -r -g bioimageio_colab bioimageio_colab
 
 # Upgrade pip
 RUN pip install --upgrade pip
 
+# Copy the requirements file to the docker environment
+COPY ./bioimageio_colab/requirements.txt /app/requirements.txt
+
 # Install the required Python packages
-RUN pip install numpy==1.26.4 \
-    imjoy-rpc==0.5.48.post2 \
-    requests==2.31.0 \
-    kaibu-utils==0.1.14 \
+RUN pip install \
+    -r /app/requirements.txt \
     segment_anything \
     torch \
     torchvision
-
-# Set the working directory
-WORKDIR /app/
 
 # Copy the python script to the docker environment
 COPY ./bioimageio_colab/segmentation_model.py /app/segmentation_model.py
