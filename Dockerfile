@@ -11,7 +11,7 @@ RUN groupadd -r bioimageio_colab && useradd -r -g bioimageio_colab bioimageio_co
 RUN pip install --upgrade pip
 
 # Copy the requirements file to the docker environment
-COPY ./bioimageio_colab/requirements.txt /app/requirements.txt
+COPY ./requirements.txt /app/requirements.txt
 
 # Install the required Python packages
 RUN pip install \

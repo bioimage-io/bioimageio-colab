@@ -1,8 +1,8 @@
 numpy==1.26.4
 hypha-rpc==0.1.12
-# hypha==0.20.1b2
 requests==2.31.0
 kaibu-utils==0.1.14
+python-dotenv
 tifffile
 matplotlib
 imjoy-jupyterlab-extension

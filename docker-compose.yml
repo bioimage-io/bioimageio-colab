@@ -4,8 +4,15 @@ services:
   interactive-segmentation:
     build:
       context: .
-      dockerfile: docker/Dockerfile
+      dockerfile: Dockerfile
+      args:
+        SOURCE_LABEL: "https://github.com/bioimage-io/bioimageio-colab"
     image: ghcr.io/bioimage-io/bioimageio-colab:latest
     env_file:
       - .env
-    command: ["--token", "${HYPHA_TOKEN}"]
+    command: [
+      "--server_url=https://hypha.aicell.io",
+      "--workspace_name=bioimageio-colab",
+      "--client_id=model-server",
+      "--service_id=interactive-segmentation",
+    ]
