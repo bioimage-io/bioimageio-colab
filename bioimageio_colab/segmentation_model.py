@@ -1,16 +1,16 @@
 import argparse
+import io
 import os
 from logging import getLogger
 from typing import Union
 
-from dotenv import find_dotenv, load_dotenv
 import numpy as np
 import requests
 import torch
+from dotenv import find_dotenv, load_dotenv
 from hypha_rpc import connect_to_server
 from kaibu_utils import mask_to_features
 from segment_anything import SamPredictor, sam_model_registry
-
 
 ENV_FILE = find_dotenv()
 if ENV_FILE:
@@ -31,44 +31,38 @@ logger = getLogger(__name__)
 logger.setLevel("INFO")
 
 
-def _get_sam_model(model_name: str) -> torch.nn.Module:
-    """
-    Get the model from SAM / micro_sam for the given name.
-    """
-    model_url = MODELS[model_name]
-    checkpoint_path = f"{model_name}.pt"
-
-    if not os.path.exists(checkpoint_path):
-        logger.info(f"Downloading model from {model_url} to {checkpoint_path}...")
-        response = requests.get(model_url)
-        if response.status_code == 200:
-            with open(checkpoint_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-
-    logger.info(f"Loading model {model_name} from {checkpoint_path}...")
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model_type = model_name[:5]
-    sam = sam_model_registry[model_type]()
-    ckpt = torch.load(checkpoint_path, map_location=device)
-    sam.load_state_dict(ckpt)
-    return sam
-
-
 def _load_model(model_name: str) -> torch.nn.Module:
     if model_name not in MODELS:
         raise ValueError(
-            f"Model {model_name} not found. Available models: {MODELS.keys()}"
+            f"Model {model_name} not found. Available models: {list(MODELS.keys())}"
         )
+
     model_url = MODELS[model_name]
-    if model_url not in STORAGE:
-        logger.info(f"Caching model {model_name} with ID '{model_url}'...")
-        sam = _get_sam_model(model_name)
-        STORAGE[model_url] = sam
-        return sam
-    else:
+
+    # Check cache first
+    if model_url in STORAGE:
         logger.info(f"Loading model {model_name} with ID '{model_url}' from cache...")
         return STORAGE[model_url]
+
+    # Download model if not in cache
+    logger.info(f"Loading model {model_name} from {model_url}...")
+    response = requests.get(model_url)
+    if response.status_code != 200:
+        raise RuntimeError(f"Failed to download model from {model_url}")
+    buffer = io.BytesIO(response.content)
+
+    # Load model state
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    ckpt = torch.load(buffer, map_location=device)
+    model_type = model_name[:5]
+    sam = sam_model_registry[model_type]()
+    sam.load_state_dict(ckpt)
+
+    # Cache the model
+    logger.info(f"Caching model {model_name} with ID '{model_url}'...")
+    STORAGE[model_url] = sam
+
+    return sam
 
 
 def _to_image(input_: np.ndarray) -> np.ndarray:
@@ -90,9 +84,7 @@ def _to_image(input_: np.ndarray) -> np.ndarray:
     return image
 
 
-def compute_embedding(
-    model_name: str, image: np.ndarray, context: dict = None
-) -> bool:
+def compute_embedding(model_name: str, image: np.ndarray, context: dict = None) -> bool:
     user_id = context["user"].get("id")
     if not user_id:
         logger.info("User ID not found in context.")
@@ -124,6 +116,7 @@ def reset_embedding(context: dict = None) -> bool:
         STORAGE[user_id].clear()
         return True
 
+
 def segment(
     point_coordinates: Union[list, np.ndarray],
     point_labels: Union[list, np.ndarray],
@@ -134,7 +127,9 @@ def segment(
         logger.info(f"User {user_id} not found in storage.")
         return []
 
-    logger.info(f"User {user_id} - segmenting with model {STORAGE[user_id].get('model_name')}...")
+    logger.info(
+        f"User {user_id} - segmenting with model {STORAGE[user_id].get('model_name')}..."
+    )
     # Load the model with the pre-computed embedding
     sam = _load_model(STORAGE[user_id].get("model_name"))
     predictor = SamPredictor(sam)
@@ -142,7 +137,9 @@ def segment(
         if key != "model_name":
             setattr(predictor, key, value)
     # Run the segmentation
-    logger.debug(f"User {user_id} - point coordinates: {point_coordinates}, {point_labels}")
+    logger.debug(
+        f"User {user_id} - point coordinates: {point_coordinates}, {point_labels}"
+    )
     if isinstance(point_coordinates, list):
         point_coordinates = np.array(point_coordinates, dtype=np.float32)
     if isinstance(point_labels, list):
@@ -184,7 +181,9 @@ async def register_service(args: dict) -> None:
     n_attempts = 0
     while colab_client_id in await test_client.list_clients():
         n_attempts += 1
-        logger.info(f"Waiting for client ID '{colab_client_id}' to be available... (attempt {n_attempts})")
+        logger.info(
+            f"Waiting for client ID '{colab_client_id}' to be available... (attempt {n_attempts})"
+        )
         await asyncio.sleep(1)
 
     # Connect to the workspace
