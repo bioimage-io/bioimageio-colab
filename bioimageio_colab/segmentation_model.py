@@ -181,7 +181,10 @@ async def register_service(args: dict) -> None:
         }
     )
     colab_client_id = f"{args.workspace_name}/{args.client_id}"
+    n_attempts = 0
     while colab_client_id not in await test_client.list_clients():
+        n_attempts += 1
+        logger.info(f"Waiting for client ID '{colab_client_id}' to be available... (attempt {n_attempts})")
         await asyncio.sleep(1)
 
     # Connect to the workspace
