@@ -9,7 +9,7 @@ async def create_workspace_token(args):
     token = await login({"server_url": args.server_url})
 
     # Connect to the Hypha server
-    user = await connect_to_server(
+    api = await connect_to_server(
         {
             "server_url": args.server_url,
             "token": token,
@@ -17,47 +17,48 @@ async def create_workspace_token(args):
     )
 
     # Check if the workspace already exists
+    user_workspaces = await api.list_workspaces()
     exists = any(
         [
             args.workspace_name == workspace["name"]
-            for workspace in await user.list_workspaces()
+            for workspace in user_workspaces
         ]
     )
 
     # Create a workspace
     if not exists or args.overwrite:
-        workspace = await user.create_workspace(
+        workspace = await api.create_workspace(
             {
                 "name": args.workspace_name,
                 "description": args.description,
-                "owners": args.owners,  # user ID of workspace owner is added automatically
+                "owners": args.owners,
                 "allow_list": args.allow_list,
                 "deny_list": args.deny_list,
                 "visibility": "public",  # public/protected
                 "persistent": True,  # keeps the workspace alive even after a server restart
             },
-            overwrite=args.overwrite,  # overwrites if the workspace already exists
+            overwrite=args.overwrite,
         )
         # Check if the workspace was created
         assert any(
             [
                 args.workspace_name == workspace["name"]
-                for workspace in await user.list_workspaces()
+                for workspace in await api.list_workspaces()
             ]
         )
         print(f"Workspace created: {workspace['name']}")
 
     # Generate a workspace token
-    token = await user.generate_token(
+    token = await api.generate_token(
         {
             "workspace": args.workspace_name,
             "expires_in": args.token_expires_in,
-            "permission": "read_write",
+            "permission": args.token_permission,
         }
     )
-    expires_in_days = token["expires_in"] / 60 / 60 / 24
+    expires_in_days = args.token_expires_in / 60 / 60 / 24
     print(
-        f"Workspace token generated ({token['permission']} - expires in {expires_in_days} days):\n{token['token']}"
+        f"Workspace token generated:\n - Permission: '{args.token_permission}'\n - Expires in: {expires_in_days} days"
     )
 
     # Save the token to a .env file
@@ -69,15 +70,15 @@ async def create_workspace_token(args):
     if os.path.exists(file_path):
         with open(file_path, "r") as env_file:
             for line in env_file:
-                if line.strip().startswith("HYPHA_TOKEN="):
-                    updated_env_lines.append(f'HYPHA_TOKEN="{token}"\n')
+                if line.strip().startswith("WORKSPACE_TOKEN="):
+                    updated_env_lines.append(f'WORKSPACE_TOKEN="{token}"\n')
                     found_token_line = True
                 else:
                     updated_env_lines.append(line)
 
-    # If HYPHA_TOKEN line wasn't found, add it
+    # If WORKSPACE_TOKEN line wasn't found, add it
     if not found_token_line:
-        updated_env_lines.append(f'HYPHA_TOKEN="{token}"\n')
+        updated_env_lines.append(f'WORKSPACE_TOKEN="{token}"\n')
 
     # Write back to the .env file
     with open(file_path, "w") as env_file:
@@ -110,19 +111,22 @@ if __name__ == "__main__":
         help="Description of the workspace",
     )
     parser.add_argument(
-        "--owners", nargs="+", default=[], help="User IDs of workspace owners"
+        "--owners",
+        nargs="+",
+        default=[],
+        help="User emails that own the workspace",  # user email of workspace creator is added automatically
     )
     parser.add_argument(
         "--allow_list",
         nargs="+",
         default=[],
-        help="User IDs allowed to access the workspace",
+        help="User emails allowed access to the workspace",
     )
     parser.add_argument(
         "--deny_list",
         nargs="+",
         default=[],
-        help="User IDs denied access to the workspace",
+        help="User emails denied access to the workspace",
     )
     parser.add_argument(
         "--overwrite",
@@ -133,7 +137,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--token_expires_in",
         default=31536000,
-        help="Token expiration time in seconds",  # 1 year
+        help="Token expiration time in seconds (default: 1 year)",
+    )
+    parser.add_argument(
+        "--token_permission",
+        default="read_write",
+        help="Token permission (must be one of: read, read_write, admin)",
     )
 
     args = parser.parse_args()
