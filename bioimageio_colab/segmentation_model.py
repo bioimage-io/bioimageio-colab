@@ -216,22 +216,6 @@ async def register_service(args: dict) -> None:
     assert sid == f"{args.workspace_name}/{args.client_id}:{args.service_id}"
     logger.info(f"Registered service with ID: {sid}")
 
-    # Test if the service can be retrieved from another workspace
-    anonymous_client = await connect_to_server(
-        {
-            "server_url": args.server_url,
-            "name": "Anonymous User",
-        }
-    )
-    segment_svc = await anonymous_client.get_service(sid)
-    assert segment_svc
-    assert await segment_svc.compute_embedding("vit_b", np.random.rand(256, 256))
-    features = await segment_svc.segment([[128, 128]], [1])
-    assert features
-    assert await segment_svc.reset_embedding()
-    assert await segment_svc.remove_user_id()
-
-
 
 if __name__ == "__main__":
     import asyncio
