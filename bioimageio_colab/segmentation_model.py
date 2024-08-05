@@ -172,6 +172,18 @@ async def register_service(args: dict) -> None:
     """
     Register the SAM annotation service on the BioImageIO Colab workspace.
     """
+    # Wait until the client ID is available
+    test_client = await connect_to_server(
+        {
+            "server_url": args.server_url,
+            "workspace": args.workspace_name,
+            "token": WORKSPACE_TOKEN,
+        }
+    )
+    colab_client_id = f"{args.workspace_name}/{args.client_id}"
+    while colab_client_id not in await test_client.list_clients():
+        await asyncio.sleep(1)
+
     # Connect to the workspace
     colab_client = await connect_to_server(
         {
