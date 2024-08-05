@@ -1,7 +1,7 @@
 import os
 import pytest
 
-from hypha_rpc.hypha.sync import connect_to_server
+from hypha_rpc.sync import connect_to_server
 
 
 def test_get_service():

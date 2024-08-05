@@ -7,7 +7,7 @@ from logging import getLogger
 import numpy as np
 import requests
 import shutil
-from hypha_rpc.hypha import connect_to_server
+from hypha_rpc import connect_to_server
 from kaibu_utils import features_to_mask
 from tifffile import imread, imwrite
 

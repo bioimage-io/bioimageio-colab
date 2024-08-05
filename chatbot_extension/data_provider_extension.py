@@ -1,6 +1,6 @@
 import asyncio
 from pydantic import BaseModel, Field
-from hypha_rpc.hypha import login, connect_to_server
+from hypha_rpc import login, connect_to_server
 from bioimageio_colab.data_provider import start_server
     
 class RegisterService(BaseModel):

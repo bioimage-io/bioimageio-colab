@@ -30,8 +30,4 @@ RUN chown -R bioimageio_colab:bioimageio_colab /app/
 USER bioimageio_colab
 
 # Register the segmentation model as a hypha service
-# Arguments:
-# --token <token>: Token for connecting to the Hypha server
-# --client_id <client_id>: Client ID for registering the service. Default is "model-server"
-# --service_id <service_id>: Service ID for registering the service. Default is "interactive-segmentation"
 ENTRYPOINT ["python", "segmentation_model.py"]
