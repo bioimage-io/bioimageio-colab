@@ -21,7 +21,7 @@ RUN pip install \
     torchvision
 
 # Copy the python script to the docker environment
-COPY ./bioimageio_colab/segmentation_model.py /app/segmentation_model.py
+COPY ./bioimageio_colab/register_sam_service.py /app/register_sam_service.py
 
 # Change ownership of the application directory to the non-root user
 RUN chown -R bioimageio_colab:bioimageio_colab /app/
@@ -30,4 +30,4 @@ RUN chown -R bioimageio_colab:bioimageio_colab /app/
 USER bioimageio_colab
 
 # Register the segmentation model as a hypha service
-ENTRYPOINT ["python", "segmentation_model.py"]
+ENTRYPOINT ["python", "register_sam_service.py"]

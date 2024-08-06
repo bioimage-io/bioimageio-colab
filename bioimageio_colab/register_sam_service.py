@@ -59,7 +59,7 @@ def _load_model(model_name: str) -> torch.nn.Module:
     sam.load_state_dict(ckpt)
 
     # Cache the model
-    logger.info(f"Caching model {model_name} with ID '{model_url}'...")
+    logger.info(f"Caching model {model_name} (device={device}) with ID '{model_url}'...")
     STORAGE[model_url] = sam
 
     return sam
