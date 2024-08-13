@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Annotation Tool</title>
+    <script src="https://cdn.jsdelivr.net/npm/hypha-rpc@0.20.14/dist/hypha-rpc-websocket.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/17.0.2/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/17.0.2/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="./worker-manager.js"></script>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="text/babel" data-presets="env,react">
+    const { useState, useEffect } = React;
+
+    function App() {
+        const [folderHandle, setFolderHandle] = useState(null);
+        const [fileList, setFileList] = useState([]);
+        const [pyodideWorker, setPyodideWorker] = useState(null);
+        const [loading, setLoading] = useState(true);
+        const [code, setCode] = useState("import os\nprint(os.listdir('/mnt'))");
+        const [output, setOutput] = useState([]);
+
+        useEffect(() => {
+            const workerManager = new PyodideWorkerManager();
+            workerManager.createWorker().then(worker => {
+                setPyodideWorker(worker);
+                setLoading(false);
+            }).catch(error => {
+                console.error("Error creating Pyodide worker:", error);
+            });
+        }, []);
+
+        const mountFolder = async () => {
+            try {
+                const dirHandle = await window.showDirectoryPicker();
+                setFolderHandle(dirHandle);
+
+                if (pyodideWorker) {
+                    await pyodideWorker.mount("/mnt", dirHandle);
+                    // show a message to the user
+                    console.log("Mounted folder:", dirHandle.name);
+                } else {
+                    console.log("Pyodide worker not ready");
+                }
+            } catch (error) {
+                console.error("Error accessing folder:", error);
+            }
+        };
+
+        const runCode = async () => {
+            if (pyodideWorker) {
+                const result = await pyodideWorker.runScript(code);
+                handleResult(result);
+            } else {
+                console.log("Pyodide worker not ready");
+            }
+        };
+
+        const handleResult = (result) => {
+            const stdout = result.filter(r => r.type === 'stdout').map(r => r.content).join("");
+            const stderr = result.filter(r => r.type === 'stderr').map(r => r.content).join("");
+            setOutput([stdout, stderr].filter(Boolean));
+        };
+
+        return (
+            <div className="flex h-screen">
+                <Sidebar />
+                <div className="flex-1 p-4">
+                    <h1 className="text-2xl font-bold mb-4">Crowd-sourcing Annotation Tool</h1>
+
+                    {loading ? (
+                        <div className="flex items-center">
+                            <div className="spinner-border animate-spin inline-block w-8 h-8 border-4 rounded-full text-blue-500" role="status">
+  
+                            </div>
+                            <span className="ml-2">Loading Pyodide worker...</span>
+                        </div>
+                    ) : (
+                        <>
+                            <button 
+                                className="bg-blue-500 text-white px-4 py-2 rounded-md mb-4"
+                                onClick={mountFolder}
+                            >
+                                Mount Local Folder
+                            </button>
+                            {folderHandle && <h2 className="text-xl font-semibold">Files in {folderHandle.name}</h2>}
+
+                            <textarea
+                                className="w-full p-2 border rounded-md mb-4"
+                                rows="4"
+                                value={code}
+                                onChange={(e) => setCode(e.target.value)}
+                            />
+
+                            <button 
+                                className="bg-green-500 text-white px-4 py-2 rounded-md mb-4"
+                                onClick={runCode}
+                            >
+                                Run Python Code
+                            </button>
+
+                            <pre className="bg-gray-100 p-2 rounded-md overflow-auto h-48">
+                                {output.map((line, index) => (
+                                    <div key={index}>{line}</div>
+                                ))}
+                            </pre>
+                        </>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    function Sidebar() {
+        return (
+            <div className="w-64 bg-gray-800 text-white p-4">
+                <h2 className="text-xl font-semibold mb-4">Navigation</h2>
+                <ul>
+                    <li className="mb-2"><a href="#" className="text-white">Home</a></li>
+                    <li className="mb-2"><a href="#" className="text-white">Annotations</a></li>
+                    <li className="mb-2"><a href="#" className="text-white">Settings</a></li>
+                </ul>
+            </div>
+        );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('app'));
+</script>
+</body>
+</html>
