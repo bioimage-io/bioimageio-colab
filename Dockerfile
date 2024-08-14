@@ -10,15 +10,17 @@ RUN groupadd -r bioimageio_colab && useradd -r -g bioimageio_colab bioimageio_co
 # Upgrade pip
 RUN pip install --upgrade pip
 
+# Install the required packages for SAM
+RUN pip install \
+    segment_anything \
+    torch \
+    torchvision
+
 # Copy the requirements file to the docker environment
 COPY ./requirements.txt /app/requirements.txt
 
 # Install the required Python packages
-RUN pip install \
-    -r /app/requirements.txt \
-    segment_anything \
-    torch \
-    torchvision
+RUN pip install -r /app/requirements.txt
 
 # Copy the python script to the docker environment
 COPY ./bioimageio_colab/register_sam_service.py /app/register_sam_service.py
