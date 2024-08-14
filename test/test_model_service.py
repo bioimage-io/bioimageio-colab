@@ -8,7 +8,7 @@ def test_get_service(
         client_id: str="model-server",
         service_id: str="interactive-segmentation",
     ):
-    client = connect_to_server({"server_url": server_url})
+    client = connect_to_server({"server_url": server_url, "method_timeout": 5})
     assert client
 
     sid = f"{workspace_name}/{client_id}:{service_id}"

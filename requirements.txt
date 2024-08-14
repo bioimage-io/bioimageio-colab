@@ -1,5 +1,5 @@
+hypha-rpc==0.20.14
 numpy==1.26.4
-hypha-rpc==0.1.12
 requests==2.31.0
 kaibu-utils==0.1.14
 python-dotenv

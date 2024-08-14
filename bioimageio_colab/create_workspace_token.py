@@ -9,7 +9,7 @@ async def create_workspace_token(args):
     token = await login({"server_url": args.server_url})
 
     # Connect to the Hypha server
-    api = await connect_to_server(
+    server = await connect_to_server(
         {
             "server_url": args.server_url,
             "token": token,
@@ -17,17 +17,14 @@ async def create_workspace_token(args):
     )
 
     # Check if the workspace already exists
-    user_workspaces = await api.list_workspaces()
+    user_workspaces = await server.list_workspaces()
     exists = any(
-        [
-            args.workspace_name == workspace["name"]
-            for workspace in user_workspaces
-        ]
+        [args.workspace_name == workspace["name"] for workspace in user_workspaces]
     )
 
     # Create a workspace
     if not exists or args.overwrite:
-        workspace = await api.create_workspace(
+        workspace = await server.create_workspace(
             {
                 "name": args.workspace_name,
                 "description": args.description,
@@ -43,17 +40,18 @@ async def create_workspace_token(args):
         assert any(
             [
                 args.workspace_name == workspace["name"]
-                for workspace in await api.list_workspaces()
+                for workspace in await server.list_workspaces()
             ]
         )
         print(f"Workspace created: {workspace['name']}")
 
     # Generate a workspace token
-    token = await api.generate_token(
+    token = await server.generate_token(
         {
             "workspace": args.workspace_name,
             "expires_in": args.token_expires_in,
             "permission": args.token_permission,
+            # "extra_scopes": [],
         }
     )
     expires_in_days = args.token_expires_in / 60 / 60 / 24
@@ -100,32 +98,40 @@ if __name__ == "__main__":
     parser.add_argument(
         "--server_url",
         default="https://hypha.aicell.io",
+        type=str,
         help="URL of the Hypha server",
     )
     parser.add_argument(
-        "--workspace_name", default="bioimageio-colab", help="Name of the workspace"
+        "--workspace_name",
+        default="bioimageio-colab",
+        type=str,
+        help="Name of the workspace",
     )
     parser.add_argument(
         "--description",
         default="The BioImageIO Colab workspace for serving interactive segmentation models.",
+        type=str,
         help="Description of the workspace",
     )
     parser.add_argument(
         "--owners",
         nargs="+",
         default=[],
+        type=str,
         help="User emails that own the workspace",  # user email of workspace creator is added automatically
     )
     parser.add_argument(
         "--allow_list",
         nargs="+",
         default=[],
+        type=str,
         help="User emails allowed access to the workspace",
     )
     parser.add_argument(
         "--deny_list",
         nargs="+",
         default=[],
+        type=str,
         help="User emails denied access to the workspace",
     )
     parser.add_argument(
@@ -137,11 +143,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--token_expires_in",
         default=31536000,
+        type=int,
         help="Token expiration time in seconds (default: 1 year)",
     )
     parser.add_argument(
         "--token_permission",
         default="read_write",
+        type=str,
         help="Token permission (must be one of: read, read_write, admin)",
     )
 
