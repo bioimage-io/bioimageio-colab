@@ -1,10 +1,10 @@
-hypha-rpc==0.20.14
+hypha-rpc==0.20.22
 numpy==1.26.4
 requests==2.31.0
 kaibu-utils==0.1.14
-python-dotenv
-tifffile
-matplotlib
-imjoy-jupyterlab-extension
-jupyterlab
-pydantic
+python-dotenv==1.0.1
+# tifffile
+# matplotlib
+# imjoy-jupyterlab-extension
+# jupyterlab
+# pydantic
