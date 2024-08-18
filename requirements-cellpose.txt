@@ -1,3 +1,7 @@
 -r "requirements.txt"
 opencv-python-headless<4.3
 cellpose
+# tifffile
+# matplotlib
+# imjoy-jupyterlab-extension
+# jupyterlab
