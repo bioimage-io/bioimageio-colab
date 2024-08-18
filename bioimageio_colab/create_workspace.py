@@ -46,6 +46,24 @@ async def create_workspace_token(args):
     else:
         print(f"Workspace already exists: {args.workspace_name}")
 
+    # Connect to the workspace
+    server = await connect_to_server(
+        {
+            "server_url": args.server_url,
+            "token": token,
+            "workspace": args.workspace_name,
+        }
+    )
+
+    # List workspace services
+    services = await server.list_services()
+    if len(services) == 0:
+        print("No services in workspace")
+    else:
+        print("Services in workspace:")
+        for service in services:
+            print(f"- {service['name']}")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Create the BioImageIO Colab workspace."
