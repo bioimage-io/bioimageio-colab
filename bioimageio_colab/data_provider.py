@@ -7,11 +7,11 @@ from logging import getLogger
 import numpy as np
 import requests
 import shutil
-from imjoy_rpc.hypha import connect_to_server
+from hypha_rpc import connect_to_server
 from kaibu_utils import features_to_mask
 from tifffile import imread, imwrite
 
-from bioimageio_colab_server.hypha_data_store import HyphaDataStore
+from bioimageio_colab.hypha_data_store import HyphaDataStore
 
 logger = getLogger(__name__)
 logger.setLevel("INFO")
@@ -84,26 +84,31 @@ def download_labels(ds, data_folder):
 
 
 async def start_server(
-    data_url: str, path2data: str = "./data", outpath: str = "./kaibu_annotations"
+    path2data: str = "./data",
+    outpath: str = "./kaibu_annotations",
+    data_url: str = None,
 ):
     """
     Start the SAM annotation server.
 
-    When multiple people open the link, they can join a common workspace as an ImJoy client
+    When multiple people open the link, they can join a common workspace as an hypha client
     """
-    # Check if the data is available
     path2data = os.path.abspath(path2data)
-    if not os.path.exists(path2data):
-        # Create the path
-        os.makedirs(path2data)
-        # Download the data
-        save_path = os.path.join(path2data, data_url.split("/")[-1])
-        download_zip(data_url, save_path)
-        # Unzip the data
-        unzip_file(save_path, path2data)
-        # Remove the zip file
-        os.remove(save_path)
-        logger.info(f"Removed {save_path}")
+    if data_url is not None:
+        # Check if the data is available
+        if not os.path.exists(path2data):
+            # Create the path
+            os.makedirs(path2data)
+            # Download the data
+            save_path = os.path.join(path2data, data_url.split("/")[-1])
+            download_zip(data_url, save_path)
+            # Unzip the data
+            unzip_file(save_path, path2data)
+            # Remove the zip file
+            os.remove(save_path)
+            logger.info(f"Removed {save_path}")
+        else:
+            logger.info(f"Data already exists at {path2data}")
 
     # Create the output paths
     path2source = os.path.abspath(os.path.join(outpath, "source"))
@@ -112,7 +117,7 @@ async def start_server(
     os.makedirs(path2label, exist_ok=True)
 
     # Connect to the server link
-    server_url = "https://ai.imjoy.io"
+    server_url = "https://hypha.aicell.io"
     server = await connect_to_server({"server_url": server_url})
 
     # Upload to hypha.
@@ -127,7 +132,10 @@ async def start_server(
         {
             "name": "Collaborative Annotation",
             "id": "bioimageio-colab-annotation",
-            "config": {"visibility": "public", "run_in_executor": True},  # make protected
+            "config": {
+                "visibility": "public",  # TODO: make protected
+                "run_in_executor": True,
+            },
             # Exposed functions:
             # get a random image from the dataset
             # returns the image as a numpy image
@@ -142,13 +150,12 @@ async def start_server(
         }
     )
     annotation_sid = svc["id"]
-    model_sid = "oNwLbCSSNbiWrpr7h85F9f/ardFE2rx8wFB69JbbUGFfp:bioimageio-colab-model"
-    config_str = f'{{"server_url": "{server_url}", "annotation_service_id": "{annotation_sid}", "model_service_id": "{model_sid}", "token": "{token}"}}'
+    config_str = f'{{"server_url": "{server_url}", "annotation_service_id": "{annotation_sid}", "token": "{token}"}}'
     encoded_config = urllib.parse.quote(
         config_str, safe="/", encoding=None, errors=None
     )
     annotator_url = (
-        "https://imjoy.io/lite?plugin=https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/kubernetes/plugins/bioimageio-colab-annotator.imjoy.html&config="
+        "https://imjoy.io/lite?plugin=https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/chatbot_extension/plugins/bioimageio-colab-annotator.imjoy.html&config="
         + encoded_config
     )
     print("-" * 80)
@@ -160,6 +167,8 @@ async def start_server(
         f"{server_url}/{server.config['workspace']}/services/{annotation_sid.split(':')[1]}/download_labels"
     )
     print("-" * 80)
+
+    return annotator_url
 
 
 if __name__ == "__main__":

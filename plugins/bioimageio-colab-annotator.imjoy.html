@@ -41,14 +41,14 @@ class BioImageIOColabAnnotator {
     async run(ctx) {
         // Extract configuration settings
         const config = ctx.config || {};
-        const serverUrl = config.server_url || "https://ai.imjoy.io";
+        const serverUrl = config.server_url || "https://hypha.aicell.io";
         const annotationServiceId = config.annotation_service_id || "bioimageio-colab-annotation";  // default for testing plugin
-        const modelServiceId = config.model_service_id || "oNwLbCSSNbiWrpr7h85F9f/ardFE2rx8wFB69JbbUGFfp:bioimageio-colab-model";  // default for testing plugin
+        const modelServiceId = "bioimageio-colab/model-server:interactive-segmentation"
         
         // Create and display the viewer window
         const viewer = await api.createWindow({src: "https://kaibu.org/#/app", fullscreen: true});
         await api.showMessage(`Connecting to server ${serverUrl}....`);
-        // Login before connecting and then use userid instead of new client_id
+        // Login before connecting and then use userid
         // TODO: Add login functionality
 
         // Connect to the Hypha server
@@ -57,6 +57,10 @@ class BioImageIOColabAnnotator {
             token: config.token,
             workspace: config.workspace,
         });
+
+        // Get the user ID
+        const connectionInfo = await server.getConnectionInfo();
+        const userID = connectionInfo.user_info.id;
 
         // Get the bioimageio-colab service from the server
         let biocolab;
@@ -76,9 +80,6 @@ class BioImageIOColabAnnotator {
             return;
         }
 
-        // Get an annotator client ID
-        const clientID = await model.client_id();
-
         // Function to get a new image and set up the viewer
         const getImage = async () => {
             if (this.image !== null) {
@@ -93,7 +94,7 @@ class BioImageIOColabAnnotator {
 
             // Reset the predictorId for the new image
             this.embeddingIsCalculated = false;
-            await model.reset_embedding(clientID);
+            await model.reset_embedding(userID);
 
             // Add the annotation functionality to the interface
             this.annotationLayer = await viewer.add_shapes([], {
@@ -112,7 +113,7 @@ class BioImageIOColabAnnotator {
                         if (!this.embeddingIsCalculated) {
                             api.showMessage("Computing embeddings for the image...");
                             try {
-                                await model.compute_embedding(clientID, this.modelName, this.image);
+                                await model.compute_embedding(userID, this.modelName, this.image);
                             } catch (e) {
                                 await api.showMessage(`Failed to compute embeddings for the image. (Error: ${e})`);
                                 return;
@@ -122,7 +123,7 @@ class BioImageIOColabAnnotator {
 
                         // Perform segmentation
                         api.showMessage("Segmenting...");
-                        const features = await model.segment(clientID, pointCoords, pointLabels);
+                        const features = await model.segment(userID, pointCoords, pointLabels);
 
                         // Add the segmented features as polygons to the annotation layer
                         for (let coords of features) {
