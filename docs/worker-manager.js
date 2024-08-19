@@ -39,7 +39,7 @@ class PyodideWorkerManager {
   async createWorker(info) {
     const id = Math.random().toString(36).substring(7)
     console.log("Creating worker:", id)
-    const worker = new Worker("/pyodide-worker.js")
+    const worker = new Worker("./pyodide-worker.js")
     await new Promise(resolve => (worker.onmessage = () => resolve()))
     this.workers[id] = worker
     worker.kill = () => {
