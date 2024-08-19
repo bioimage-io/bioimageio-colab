@@ -24,6 +24,7 @@
         .bg-blue { background-color: var(--color-blue); }
         .bg-purple { background-color: var(--color-purple); }
         .bg-green { background-color: var(--color-green); }
+        .bg-disabled-button { background-color: #a9a9a9; }
 
         /* Hover states with 50% transparency */
         .bg-turquoise-hover:hover { background-color: rgba(149, 176, 173, 0.3); }
@@ -99,7 +100,7 @@
                 });
         }, []);
 
-        const login_callback = (context) => {
+        const loginCallback = (context) => {
             window.open(context.login_url);
         }
 
@@ -114,14 +115,14 @@
             }
             token = await hyphaWebsocketClient.login({
                 "server_url": serverURL,
-                "login_callback": login_callback,
+                "login_callback": loginCallback,
             });
             localStorage.setItem('token', token);
             localStorage.setItem('tokenExpiry', new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString());
             return token;
         }
 
-        const onLogin = async () => {
+        const handleLogin = async () => {
             const token = await login();
             const server = await hyphaWebsocketClient.connectToServer({
                 "server_url": serverURL,
@@ -174,7 +175,7 @@
             setOutput([stdout, stderr].filter(Boolean));
         };
 
-        const createAnnotationSession = async () => {
+        const deployAnnotationSession = async () => {
             if (imageFolderHandle) {
                 try {
                     const annotationsFolder = await imageFolderHandle.getDirectoryHandle('annotations', { create: true });
@@ -221,27 +222,34 @@
             }
         };
 
-        const isImageFolderMounted = imageFolderHandle !== null;
-        const isAnnotationSessionCreated = annotationsFolderHandle !== null;
-
         return (
             <div className="flex h-screen">
                 <Sidebar
-                    onLogin={onLogin}
+                    onLogin={handleLogin}
                     user={user}
                     activeTab={activeTab}
                     onTabClick={setActiveTab}
                 />
                 <div className="flex-1 p-4">
-                    <h1 className="text-2xl font-bold mb-4">Crowd-sourcing Annotation Tool</h1>
+                    <h2 className="text-2xl font-bold mb-4" style={{ height: '2rem', overflow: 'hidden' }}>
+                        Crowd-sourcing Annotation Tool
+                    </h2>
                     {isLoadingWorker ? (
                         <div className="flex justify-center items-center h-full">
                             <div className="spinner-border"></div>
                         </div>
                     ) : (
-                        <>
+                        <>  
                             {activeTab === "Local Deployment" && (
-                                <>
+                                <>  
+                                    <div className="text-base text-gray-700 mb-4" style={{ height: '5rem', overflowY: 'auto' }}>
+                                        <p>
+                                            First, <strong>mount a local folder</strong> to store your images. Your data stays in the browser, ensuring you keep full control. Next, <strong>deploy the data service</strong> from your browser, which will create an "annotations" folder for saving annotation masks. Finally, <strong>share the annotator URL</strong>.
+                                        </p>
+                                        <p className="mt-2">
+                                            <strong>Note:</strong> Closing this tab stops the annotation deployment. Use "Remote Deployments" to keep sessions running.
+                                        </p>
+                                    </div>
                                     <div className="flex items-center mb-4">
                                         <div className="text-xl font-semibold mr-2">1.</div>
                                         <button 
@@ -254,29 +262,29 @@
 
                                         <div className="text-xl font-semibold mr-2">2.</div>
                                         <button 
-                                            className="bg-purple text-white px-4 py-2 rounded-md"
-                                            onClick={createAnnotationSession}
-                                            disabled={!isImageFolderMounted}
+                                            className={`${imageFolderHandle ? "bg-purple" : "bg-disabled-button"} text-white px-4 py-2 rounded-md`}
+                                            onClick={deployAnnotationSession}
+                                            disabled={!imageFolderHandle}
                                         >
-                                            Create Annotation Session
+                                            Deploy Annotation Session
                                         </button>
                                         <span className="mx-2 text-xl">→</span>
 
                                         <div className="text-xl font-semibold mr-2">3.</div>
                                         <button 
                                             id="share-url-button"
-                                            className="bg-purple text-white px-4 py-2 rounded-md"
+                                            className={`${annotationsFolderHandle ? "bg-purple" : "bg-disabled-button"} text-white px-4 py-2 rounded-md`}
                                             onClick={shareAnnotationURL}
-                                            disabled={!isAnnotationSessionCreated}
+                                            disabled={!annotationsFolderHandle}
                                         >
                                             {copyFeedback || "Share Annotation URL"}
                                         </button>
                                     </div>
 
                                     <div className="flex space-x-4">
-                                        {isImageFolderMounted && (
+                                        {imageFolderHandle && (
                                             <div className="bg-blue w-1/2 p-4 rounded-md overflow-auto"
-                                                style={{ maxHeight: 'calc(100vh - 140px)', width: '50%' }}>
+                                                style={{ maxHeight: 'calc(100vh - 226px)', width: '50%' }}>
                                                 <div className="flex justify-between items-center mb-2">
                                                     <h2 className="text-xl font-semibold">Number of Images: ({imageList.length})</h2>
                                                     <button onClick={() => updateFileList(imageFolderHandle, setImageList, setIsLoadingImages)}>
@@ -303,7 +311,7 @@
 
                                         {annotationsFolderHandle && (
                                             <div className="w-1/2 bg-blue p-4 rounded-md overflow-auto"
-                                                style={{ maxHeight: 'calc(100vh - 140px)', width: '50%' }}>
+                                                style={{ maxHeight: 'calc(100vh - 226px)', width: '50%' }}>
                                                 <div className="flex justify-between items-center mb-2">
                                                     <h2 className="text-xl font-semibold">Number of Annotations: ({annotationsList.length})</h2>
                                                     <button onClick={() => updateFileList(annotationsFolderHandle, setAnnotationsList, setIsLoadingAnnotations)}>
@@ -340,11 +348,11 @@
                                 </div>
                             )}
 
-                            {activeTab === "My Deployments" && (
+                            {activeTab === "Browse Deployments" && (
                                 <div className="flex justify-center items-center h-full">
                                     <div className="text-xl flex items-center">
                                         <i className="fas fa-tools mr-2"></i>
-                                        <span className="font-semibold">My Deployments</span>&nbsp;is coming soon.
+                                        <span className="font-semibold">Browse Deployments</span>&nbsp;is coming soon.
                                     </div>
                                 </div>
                             )}
@@ -391,10 +399,10 @@
                         <a href="#" className="text-white">Remote Deployment</a>
                     </li>
                     <li 
-                        className={`mb-2 p-2 rounded-md cursor-pointer ${activeTab === "My Deployments" ? "tab-active" : "bg-turquoise-hover"}`}
-                        onClick={() => onTabClick("My Deployments")}
+                        className={`mb-2 p-2 rounded-md cursor-pointer ${activeTab === "Browse Deployments" ? "tab-active" : "bg-turquoise-hover"}`}
+                        onClick={() => onTabClick("Browse Deployments")}
                     >
-                        <a href="#" className="text-white">My Deployments</a>
+                        <a href="#" className="text-white">Browse Deployments</a>
                     </li>
                 </ul>
             </div>
