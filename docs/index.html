@@ -88,70 +88,6 @@
                 });
         }, []);
 
-        const updateFileList = async (dirHandle, setFileList, setLoading) => {
-            setLoading(true);
-            try {
-                const files = [];
-                for await (const entry of dirHandle.values()) {
-                    if (entry.kind === 'file') {
-                        files.push(entry.name);
-                    }
-                }
-                setFileList(files.sort()); // Sort files alphabetically
-            } catch (error) {
-                console.error("Error updating file list:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        const mountFolder = async () => {
-            try {
-                const dirHandle = await window.showDirectoryPicker();
-                setImageFolderHandle(dirHandle);
-                await updateFileList(dirHandle, setImageList, setIsLoadingImages); // Update image list
-                console.log("Mounted folder:", dirHandle.name);
-            } catch (error) {
-                console.error("Error accessing folder:", error);
-            }
-        };
-
-        const createAnnotationSession = async () => {
-            if (imageFolderHandle) {
-                try {
-                    const annotationsFolder = await imageFolderHandle.getDirectoryHandle('annotations', { create: true });
-                    setAnnotationsFolderHandle(annotationsFolder);
-                    await updateFileList(annotationsFolder, setAnnotationsList, setIsLoadingAnnotations); // Update annotations list
-                    console.log("Created annotations folder:", annotationsFolder.name);
-                } catch (error) {
-                    console.error("Error creating annotations folder:", error);
-                }
-                // Run code to start annotation session
-                try {
-                    // await runCode();
-                    // Placeholder for setting annotationURL
-                    setAnnotationURL("http://example.com/annotation-session-url"); // Replace with actual URL
-                } catch (error) {
-                    console.error("Error running Python code:", error);
-                }
-            }
-        };
-
-        const runCode = async () => {
-            if (pyodideWorker) {
-                const result = await pyodideWorker.runScript(code);
-                handleResult(result);
-            } else {
-                console.log("Pyodide worker not ready");
-            }
-        };
-
-        const handleResult = (result) => {
-            const stdout = result.filter(r => r.type === 'stdout').map(r => r.content).join("");
-            const stderr = result.filter(r => r.type === 'stderr').map(r => r.content).join("");
-            setOutput([stdout, stderr].filter(Boolean));
-        };
-
         const login_callback = (context) => {
             window.open(context.login_url);
         }
@@ -182,6 +118,71 @@
             });
             setUser(server.config.user);
             console.log("Logged in as:", server.config.user);
+        };
+
+        const updateFileList = async (dirHandle, setFileList, setLoading) => {
+            setLoading(true);
+            try {
+                const files = [];
+                for await (const entry of dirHandle.values()) {
+                    if (entry.kind === 'file') {
+                        files.push(entry.name);
+                    }
+                }
+                setFileList(files.sort()); // Sort files alphabetically
+            } catch (error) {
+                console.error("Error updating file list:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const mountFolder = async () => {
+            try {
+                const dirHandle = await window.showDirectoryPicker();
+                setImageFolderHandle(dirHandle);
+                await updateFileList(dirHandle, setImageList, setIsLoadingImages); // Update image list
+                console.log("Mounted folder:", dirHandle.name);
+            } catch (error) {
+                console.error("Error accessing folder:", error);
+            }
+        };
+
+        const runCode = async () => {
+            if (pyodideWorker) {
+                const result = await pyodideWorker.runScript(code);
+                handleResult(result);
+            } else {
+                console.log("Pyodide worker not ready");
+            }
+        };
+
+        const handleResult = (result) => {
+            const stdout = result.filter(r => r.type === 'stdout').map(r => r.content).join("");
+            const stderr = result.filter(r => r.type === 'stderr').map(r => r.content).join("");
+            setOutput([stdout, stderr].filter(Boolean));
+        };
+
+        const createAnnotationSession = async () => {
+            if (imageFolderHandle) {
+                try {
+                    const annotationsFolder = await imageFolderHandle.getDirectoryHandle('annotations', { create: true });
+                    setAnnotationsFolderHandle(annotationsFolder);
+                    await updateFileList(annotationsFolder, setAnnotationsList, setIsLoadingAnnotations); // Update annotations list
+                    console.log("Created annotations folder:", annotationsFolder.name);
+                } catch (error) {
+                    console.error("Error creating annotations folder:", error);
+                }
+                // Run code to start annotation session
+                try {
+                    // await runCode();
+                    // TODO: get annotator_url from stdout
+                    // Placeholder for setting annotationURL
+                    setAnnotationURL("http://example.com/annotation-session-url"); // Replace with actual URL
+                } catch (error) {
+                    console.error("Error running Python code:", error);
+                }
+            }
         };
 
         const shareAnnotationURL = async () => {
