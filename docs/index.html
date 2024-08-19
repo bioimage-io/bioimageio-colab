@@ -4,11 +4,46 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Annotation Tool</title>
-    <script src="https://cdn.jsdelivr.net/npm/hypha-rpc@0.20.14/dist/hypha-rpc-websocket.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hypha-rpc@latest/dist/hypha-rpc.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hypha-rpc@latest/dist/hypha-rpc-websocket.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/17.0.2/umd/react.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/17.0.2/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .spinner-border {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #3498db;
+            border-radius: 50%;
+            width: 2rem;
+            height: 2rem;
+            animation: spin 1s infinite linear;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        .clipboard-copy {
+            display: inline-block;
+            padding: 0.5rem;
+            margin-left: 0.5rem;
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 0.25rem;
+        }
+        .clipboard-copy.show {
+            animation: fadeInOut 3s;
+        }
+        @keyframes fadeInOut {
+            0% { opacity: 1; }
+            20% { opacity: 1; }
+            80% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+    </style>
     <script src="./worker-manager.js"></script>
 </head>
 <body>
@@ -17,38 +52,88 @@
 <script type="text/babel" data-presets="env,react">
     const { useState, useEffect } = React;
 
+    const PYTHON_FILE_NAME = 'provide_images.py';
+
     function App() {
-        const [folderHandle, setFolderHandle] = useState(null);
-        const [fileList, setFileList] = useState([]);
+        const [serverURL, setServerURL] = useState("http://hypha.aicell.io");
         const [pyodideWorker, setPyodideWorker] = useState(null);
-        const [loading, setLoading] = useState(true);
-        const [code, setCode] = useState("import os\nprint(os.listdir('/mnt'))");
-        const [output, setOutput] = useState([]);
+        const [code, setCode] = useState("");
+        const [user, setUser] = useState({});
+        const [imageFolderHandle, setImageFolderHandle] = useState(null);
+        const [imageList, setImageList] = useState([]);
+        const [annotationsFolderHandle, setAnnotationsFolderHandle] = useState(null);
+        const [annotationsList, setAnnotationsList] = useState([]);
+        const [isLoadingWorker, setIsLoadingWorker] = useState(true);
+        const [isLoadingImages, setIsLoadingImages] = useState(false);
+        const [isLoadingAnnotations, setIsLoadingAnnotations] = useState(false);
+        const [annotationURL, setAnnotationURL] = useState("");
+        const [copyFeedback, setCopyFeedback] = useState("");
 
         useEffect(() => {
             const workerManager = new PyodideWorkerManager();
             workerManager.createWorker().then(worker => {
                 setPyodideWorker(worker);
-                setLoading(false);
+                setIsLoadingWorker(false); // Hide spinner when worker is ready
             }).catch(error => {
                 console.error("Error creating Pyodide worker:", error);
             });
+
+            fetch(`./${PYTHON_FILE_NAME}`)
+                .then(response => response.text())
+                .then(text => {
+                    setCode(text);
+                })
+                .catch(error => {
+                    console.error(`Error loading ${PYTHON_FILE_NAME}:`, error);
+                });
         }, []);
+
+        const updateFileList = async (dirHandle, setFileList, setLoading) => {
+            setLoading(true);
+            try {
+                const files = [];
+                for await (const entry of dirHandle.values()) {
+                    if (entry.kind === 'file') {
+                        files.push(entry.name);
+                    }
+                }
+                setFileList(files.sort()); // Sort files alphabetically
+            } catch (error) {
+                console.error("Error updating file list:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
 
         const mountFolder = async () => {
             try {
                 const dirHandle = await window.showDirectoryPicker();
-                setFolderHandle(dirHandle);
-
-                if (pyodideWorker) {
-                    await pyodideWorker.mount("/mnt", dirHandle);
-                    // show a message to the user
-                    console.log("Mounted folder:", dirHandle.name);
-                } else {
-                    console.log("Pyodide worker not ready");
-                }
+                setImageFolderHandle(dirHandle);
+                await updateFileList(dirHandle, setImageList, setIsLoadingImages); // Update image list
+                console.log("Mounted folder:", dirHandle.name);
             } catch (error) {
                 console.error("Error accessing folder:", error);
+            }
+        };
+
+        const createAnnotationSession = async () => {
+            if (imageFolderHandle) {
+                try {
+                    const annotationsFolder = await imageFolderHandle.getDirectoryHandle('annotations', { create: true });
+                    setAnnotationsFolderHandle(annotationsFolder);
+                    await updateFileList(annotationsFolder, setAnnotationsList, setIsLoadingAnnotations); // Update annotations list
+                    console.log("Created annotations folder:", annotationsFolder.name);
+                } catch (error) {
+                    console.error("Error creating annotations folder:", error);
+                }
+                // Run code to start annotation session
+                try {
+                    // await runCode();
+                    // Placeholder for setting annotationURL
+                    setAnnotationURL("http://example.com/annotation-session-url"); // Replace with actual URL
+                } catch (error) {
+                    console.error("Error running Python code:", error);
+                }
             }
         };
 
@@ -67,48 +152,164 @@
             setOutput([stdout, stderr].filter(Boolean));
         };
 
+        const login_callback = (context) => {
+            window.open(context.login_url);
+        }
+
+        const login = async () => {
+            let token = localStorage.getItem('token');
+            if (token) {
+                const tokenExpiry = localStorage.getItem('tokenExpiry');
+                if (tokenExpiry && new Date(tokenExpiry) > new Date()) {
+                    console.log("Using saved token:", token);
+                    return token;
+                }
+            }
+            token = await hyphaWebsocketClient.login({
+                "server_url": serverURL,
+                "login_callback": login_callback,
+            });
+            localStorage.setItem('token', token);
+            localStorage.setItem('tokenExpiry', new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString());
+            return token;
+        }
+
+        const onLogin = async () => {
+            const token = await login();
+            const server = await hyphaWebsocketClient.connectToServer({
+                "server_url": serverURL,
+                "token": token
+            });
+            setUser(server.config.user);
+            console.log("Logged in as:", server.config.user);
+        };
+
+        const shareAnnotationURL = async () => {
+            if (!annotationURL) return;
+
+            setCopyFeedback("Copying Annotation URL...");
+            // Disable button while copying
+            const button = document.querySelector("#share-url-button");
+            button.disabled = true;
+
+            try {
+                await navigator.clipboard.writeText(annotationURL);
+                setTimeout(() => {
+                    setCopyFeedback("Copied Annotation URL!");
+                    // Re-enable button after feedback time
+                    setTimeout(() => {
+                        setCopyFeedback("");
+                        button.disabled = false;
+                    }, 5000);
+                }, 1000);
+            } catch (err) {
+                console.error("Failed to copy annotation URL:", err);
+                setCopyFeedback("");
+                button.disabled = false;
+            }
+        };
+
+        const isImageFolderMounted = imageFolderHandle !== null;
+        const isAnnotationSessionCreated = annotationsFolderHandle !== null;
+
         return (
             <div className="flex h-screen">
-                <Sidebar />
+                <Sidebar onLogin={onLogin} user={user} />
                 <div className="flex-1 p-4">
                     <h1 className="text-2xl font-bold mb-4">Crowd-sourcing Annotation Tool</h1>
 
-                    {loading ? (
-                        <div className="flex items-center">
-                            <div className="spinner-border animate-spin inline-block w-8 h-8 border-4 rounded-full text-blue-500" role="status">
-  
-                            </div>
-                            <span className="ml-2">Loading Pyodide worker...</span>
+                    {isLoadingWorker ? (
+                        <div className="flex justify-center items-center h-full">
+                            <div className="spinner-border"></div>
                         </div>
                     ) : (
                         <>
-                            <button 
-                                className="bg-blue-500 text-white px-4 py-2 rounded-md mb-4"
-                                onClick={mountFolder}
-                            >
-                                Mount Local Folder
-                            </button>
-                            {folderHandle && <h2 className="text-xl font-semibold">Files in {folderHandle.name}</h2>}
+                            <div className="flex items-center mb-4">
+                                <div className="text-xl font-semibold mr-2">1.</div>
+                                <button 
+                                    className="bg-blue-500 text-white px-4 py-2 rounded-md"
+                                    onClick={mountFolder}
+                                >
+                                    Mount Local Folder
+                                </button>
+                                <span className="mx-2 text-xl">→</span>
 
-                            <textarea
-                                className="w-full p-2 border rounded-md mb-4"
-                                rows="4"
-                                value={code}
-                                onChange={(e) => setCode(e.target.value)}
-                            />
+                                <div className="text-xl font-semibold mr-2">2.</div>
+                                <button 
+                                    className="bg-green-500 text-white px-4 py-2 rounded-md"
+                                    onClick={createAnnotationSession}
+                                    disabled={!isImageFolderMounted}
+                                >
+                                    Create Annotation Session
+                                </button>
+                                <span className="mx-2 text-xl">→</span>
 
-                            <button 
-                                className="bg-green-500 text-white px-4 py-2 rounded-md mb-4"
-                                onClick={runCode}
-                            >
-                                Run Python Code
-                            </button>
+                                <div className="text-xl font-semibold mr-2">3.</div>
+                                <button 
+                                    id="share-url-button"
+                                    className="bg-yellow-500 text-white px-4 py-2 rounded-md"
+                                    onClick={shareAnnotationURL}
+                                    disabled={!isAnnotationSessionCreated}
+                                >
+                                    {copyFeedback || "Share Annotation URL"}
+                                </button>
+                            </div>
 
-                            <pre className="bg-gray-100 p-2 rounded-md overflow-auto h-48">
-                                {output.map((line, index) => (
-                                    <div key={index}>{line}</div>
-                                ))}
-                            </pre>
+                            <div className="flex space-x-4">
+                                {isImageFolderMounted && (
+                                    <div className="w-1/2 bg-gray-700 p-4 rounded-md overflow-auto"
+                                        style={{ maxHeight: 'calc(100vh - 140px)', width: '50%' }}>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <h2 className="text-xl font-semibold">Number of Images: ({imageList.length})</h2>
+                                            <button onClick={() => updateFileList(imageFolderHandle, setImageList, setIsLoadingImages)}>
+                                                <i className="fas fa-sync-alt text-white"></i>
+                                            </button>
+                                        </div>
+                                        {isLoadingImages ? (
+                                            <div className="flex justify-center items-center h-full">
+                                                <div className="spinner-border"></div>
+                                            </div>
+                                        ) : (
+                                            <ul>
+                                                {imageList.length > 0 ? (
+                                                    imageList.map((file, index) => (
+                                                        <li key={index} className="text-white">{file}</li>
+                                                    ))
+                                                ) : (
+                                                    <li className="text-white">No files found.</li>
+                                                )}
+                                            </ul>
+                                        )}
+                                    </div>
+                                )}
+
+                                {annotationsFolderHandle && (
+                                    <div className="w-1/2 bg-gray-700 p-4 rounded-md overflow-auto"
+                                        style={{ maxHeight: 'calc(100vh - 140px)', width: '50%' }}>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <h2 className="text-xl font-semibold">Number of Annotations: ({annotationsList.length})</h2>
+                                            <button onClick={() => updateFileList(annotationsFolderHandle, setAnnotationsList, setIsLoadingAnnotations)}>
+                                                <i className="fas fa-sync-alt text-white"></i>
+                                            </button>
+                                        </div>
+                                        {isLoadingAnnotations ? (
+                                            <div className="flex justify-center items-center h-full">
+                                                <div className="spinner-border"></div>
+                                            </div>
+                                        ) : (
+                                            <ul>
+                                                {annotationsList.length > 0 ? (
+                                                    annotationsList.map((file, index) => (
+                                                        <li key={index} className="text-white">{file}</li>
+                                                    ))
+                                                ) : (
+                                                    <li className="text-white">No files found.</li>
+                                                )}
+                                            </ul>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </>
                     )}
                 </div>
@@ -116,7 +317,7 @@
         );
     }
 
-    function Sidebar() {
+    function Sidebar({ onLogin, user }) {
         return (
             <div className="w-64 bg-gray-800 text-white p-4">
                 <h2 className="text-xl font-semibold mb-4">Navigation</h2>
@@ -125,6 +326,17 @@
                     <li className="mb-2"><a href="#" className="text-white">Annotations</a></li>
                     <li className="mb-2"><a href="#" className="text-white">Settings</a></li>
                 </ul>
+                <button 
+                    className="bg-blue-500 text-white px-4 py-2 rounded-md mb-4"
+                    onClick={onLogin}
+                >
+                    Login
+                </button>
+                {user.email && (
+                    <div className="mt-4 p-4 bg-gray-700 rounded-md">
+                        <p>User: {user.email}</p>
+                    </div>
+                )}
             </div>
         );
     }
