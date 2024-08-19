@@ -65,7 +65,7 @@
     const PYTHON_FILE_NAME = 'provide_images.py';
 
     function App() {
-        const [serverURL, setServerURL] = useState("http://hypha.aicell.io");
+        const [serverURL, setServerURL] = useState("wss://hypha.aicell.io/ws");
         const [pyodideWorker, setPyodideWorker] = useState(null);
         const [code, setCode] = useState("");
         const [user, setUser] = useState({});
