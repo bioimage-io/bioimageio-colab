@@ -29,6 +29,9 @@ COPY ./bioimageio_colab/register_sam_service.py /app/register_sam_service.py
 # Change ownership of the application directory to the non-root user
 RUN chown -R bioimageio_colab:bioimageio_colab /app/
 
+# Add a build argument for cache invalidation
+ARG CACHEBUST=1
+
 # Fetch the Hypha server version and reinstall or upgrade hypha-rpc to the matching version
 RUN HYPHA_VERSION=$(curl -s https://hypha.aicell.io/config.json | jq -r '.hypha_version') && \
     pip install --upgrade "hypha-rpc<=$HYPHA_VERSION"
