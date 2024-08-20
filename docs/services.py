@@ -13,7 +13,7 @@ SERVER_URL = "https://hypha.aicell.io"
 PLUGIN_URL = "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/chatbot_extension/plugins/bioimageio-colab-annotator.imjoy.html"
 PATH_TO_DATA = "/mnt/"
 PATH_TO_ANNOTATIONS = os.path.join(PATH_TO_DATA, "annotations")
-os.makedirs(PATH_TO_ANNOTATIONS, exist_ok=True)
+os.makedirs(PATH_TO_ANNOTATIONS, exist_ok=True)  # Make sure the annotations folder exists
 
 
 def list_image_files():
@@ -63,7 +63,7 @@ def upload_image_to_s3():
     raise NotImplementedError
 
 
-async def register_service(callback):
+async def register_service():
     # Connect to the server link
     server = await connect_to_server({"server_url": SERVER_URL})
 
@@ -89,14 +89,30 @@ async def register_service(callback):
         }
     )
 
+    # Create the annotator URL
     annotation_sid = svc["id"]
     config_str = f'{{"server_url": "{SERVER_URL}", "annotation_service_id": "{annotation_sid}", "token": "{token}"}}'
     encoded_config = urllib.parse.quote(
         config_str, safe="/", encoding=None, errors=None
     )
     annotator_url = f"https://imjoy.io/lite?plugin={PLUGIN_URL}&config={encoded_config}"
-    callback(annotator_url)
-    print("Annotator URL:", annotator_url)
+
+    # Option 1: Return the annotator URL to stdout
+    print(annotator_url)
+
+    # Option 2: Save the annotator URL to a file
+    with open("/mnt/annotator_url.txt", "w") as f:
+        f.write(annotator_url)
+        # Doesn't show up in mounted folder
+
+    # Option 3: Save the annotator URL to the local storage
+    # js.localStorage.setItem("annotator_url", annotator_url)
+
+    # Option 4: Send the annotator URL to the main thread
+    # js.self.postMessage({"type": "annotator_url", "value": annotator_url})
+
+    # Option 5: Send the annotator URL via hypha service
+    # requires the registration of a service in the main thread
 
 
 # Start the service
