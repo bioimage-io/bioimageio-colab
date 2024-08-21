@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BioimgeIO Colab</title>
-    <script src="https://cdn.jsdelivr.net/npm/hypha-rpc@latest/dist/hypha-rpc.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hypha-rpc@latest/dist/hypha-rpc-websocket.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/17.0.2/umd/react.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/17.0.2/umd/react-dom.production.min.js"></script>
@@ -20,36 +20,77 @@
             --color-green: #07332E;
         }
 
-        .bg-turquoise { background-color: var(--color-turquoise); }
-        .bg-blue { background-color: var(--color-blue); }
-        .bg-purple { background-color: var(--color-purple); }
-        .bg-green { background-color: var(--color-green); }
-        .bg-disabled-button { background-color: #a9a9a9; }
+        .bg-turquoise {
+            background-color: var(--color-turquoise);
+        }
+
+        .bg-blue {
+            background-color: var(--color-blue);
+        }
+
+        .bg-purple {
+            background-color: var(--color-purple);
+        }
+
+        .bg-green {
+            background-color: var(--color-green);
+        }
+
+        .bg-disabled-button {
+            background-color: #a9a9a9;
+        }
 
         /* Hover states with 50% transparency */
-        .bg-turquoise-hover:hover { background-color: rgba(149, 176, 173, 0.3); }
-        .bg-blue-hover:hover { background-color: rgba(49, 73, 102, 0.3); }
-        .bg-purple-hover:hover { background-color: rgba(71, 28, 77, 0.3); }
-        .bg-green-hover:hover { background-color: rgba(7, 51, 46, 0.3); }
-    
+        .bg-turquoise-hover:hover {
+            background-color: rgba(149, 176, 173, 0.3);
+        }
+
+        .bg-blue-hover:hover {
+            background-color: rgba(49, 73, 102, 0.3);
+        }
+
+        .bg-purple-hover:hover {
+            background-color: rgba(71, 28, 77, 0.3);
+        }
+
+        .bg-green-hover:hover {
+            background-color: rgba(7, 51, 46, 0.3);
+        }
+
         .spinner-border {
             border: 4px solid rgba(0, 0, 0, 0.1);
-            border-left-color: var(--color-blue);
+            border-left-color: var(--color-purple);
             border-radius: 50%;
             width: 2rem;
             height: 2rem;
             animation: spin 1s infinite linear;
         }
+        .floating-spinner{
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.1); /* Optional: for a semi-transparent background */
+            z-index: 9999 /* Ensure it is on top of other elements */
+
+        }
+
         @keyframes spin {
             to {
                 transform: rotate(360deg);
             }
         }
+
         .tab-active {
             background-color: var(--color-turquoise);
             border-radius: 0.5rem;
             color: white;
         }
+
         .separator {
             border-top: 1px solid #555;
             margin: 1rem 0;
@@ -57,374 +98,412 @@
     </style>
     <script src="./worker-manager.js"></script>
 </head>
+
 <body>
-<div id="app"></div>
+    <script type="module">
+        import { get, set } from 'https://cdn.jsdelivr.net/npm/idb-keyval@6/+esm';
+        window.getFromDB = get;
+        window.saveToDB = set;
+    </script>
+    <div id="app"></div>
+    <script type="text/babel" data-presets="env,react">
 
-<script type="text/babel" data-presets="env,react">
-    const { useState, useEffect } = React;
+        const { useState, useEffect } = React;
 
-    const REGISTER_SERVICE_FILE = 'services.py';
+        const REGISTER_SERVICE_FILE = 'services.py';
+        let workerPromise;
+        function App() {
+            const [serverURL, setServerURL] = useState("wss://hypha.aicell.io/ws");
+            const [pyodideOutput, setPyodideOutput] = useState([]);
+            const [user, setUser] = useState({});
+            const [imageFolderHandle, setImageFolderHandle] = useState(null);
+            const [imageList, setImageList] = useState([]);
+            const [annotationsFolderHandle, setAnnotationsFolderHandle] = useState(null);
+            const [annotationsList, setAnnotationsList] = useState([]);
+            const [isRunning, setIsRunning] = useState(false);
+            const [isLoadingImages, setIsLoadingImages] = useState(false);
+            const [isLoadingAnnotations, setIsLoadingAnnotations] = useState(false);
+            const [annotationURL, setAnnotationURL] = useState("placeholder");
+            const [copyFeedback, setCopyFeedback] = useState("");
+            const [activeTab, setActiveTab] = useState("Local Deployment");
 
-    function App() {
-        const [serverURL, setServerURL] = useState("wss://hypha.aicell.io/ws");
-        const [pyodideWorker, setPyodideWorker] = useState(null);
-        const [pyodideOutput, setPyodideOutput] = useState([]);
-        const [user, setUser] = useState({});
-        const [imageFolderHandle, setImageFolderHandle] = useState(null);
-        const [imageList, setImageList] = useState([]);
-        const [annotationsFolderHandle, setAnnotationsFolderHandle] = useState(null);
-        const [annotationsList, setAnnotationsList] = useState([]);
-        const [isLoadingWorker, setIsLoadingWorker] = useState(true);
-        const [isLoadingImages, setIsLoadingImages] = useState(false);
-        const [isLoadingAnnotations, setIsLoadingAnnotations] = useState(false);
-        const [annotationURL, setAnnotationURL] = useState("placeholder");
-        const [copyFeedback, setCopyFeedback] = useState("");
-        const [activeTab, setActiveTab] = useState("Local Deployment");
+            useEffect(() => {
+                workerPromise = new Promise((resolve, reject) => {
+                    const workerManager = new PyodideWorkerManager();
+                    workerManager.createWorker().then(worker => {
+                        setIsRunning(false);
+                        resolve(worker);
+                    }).catch(error => {
+                        console.error("Error creating Pyodide worker:", error);
+                        reject(error);
+                    });
+                });
+                window.getFromDB('imageFolderDirHandle').then((dirHandle) => {
+                    if (dirHandle) setImageFolderHandle(dirHandle); // Set image folder handle
+                });
+            }, []);
 
-        useEffect(() => {
-            const workerManager = new PyodideWorkerManager();
-            workerManager.createWorker().then(worker => {
-                setPyodideWorker(worker);
-                setIsLoadingWorker(false); // Hide spinner when worker is ready
-            }).catch(error => {
-                console.error("Error creating Pyodide worker:", error);
-            });
-        }, []);
-
-        const runCode = async (code) => {
-            if (pyodideWorker) {
+            const runCode = async (code) => {
+                const pyodideWorker = await workerPromise;
                 console.log("Running code:\n-------------\n", code);  // TODO: Remove this line
                 try {
                     const result = await pyodideWorker.runScript(code);
                     handleResult(result);
+                    return result;
                 } catch (error) {
                     console.error("Error running code:", error);
+                    throw error;
                 }
-            } else {
-                console.log("Pyodide worker not ready");
+            };
+
+            const handleResult = (result) => {
+                const stdout = result.filter(r => r.type === 'stdout').map(r => r.content).join("");
+                const stderr = result.filter(r => r.type === 'stderr').map(r => r.content).join("");
+                setPyodideOutput([stdout, stderr].filter(Boolean));
+            };
+
+            const loginCallback = (context) => {
+                window.open(context.login_url);
             }
-        };
 
-        const handleResult = (result) => {
-            const stdout = result.filter(r => r.type === 'stdout').map(r => r.content).join("");
-            const stderr = result.filter(r => r.type === 'stderr').map(r => r.content).join("");
-            setPyodideOutput([stdout, stderr].filter(Boolean));
-        };
-
-        const loginCallback = (context) => {
-            window.open(context.login_url);
-        }
-
-        const login = async () => {
-            let token = localStorage.getItem('token');
-            if (token) {
-                const tokenExpiry = localStorage.getItem('tokenExpiry');
-                if (tokenExpiry && new Date(tokenExpiry) > new Date()) {
-                    console.log("Using saved token:", token);
-                    return token;
-                }
-            }
-            token = await hyphaWebsocketClient.login({
-                "server_url": serverURL,
-                "login_callback": loginCallback,
-            });
-            localStorage.setItem('token', token);
-            localStorage.setItem('tokenExpiry', new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString());
-            return token;
-        }
-
-        const handleLogin = async () => {
-            const token = await login();
-            const server = await hyphaWebsocketClient.connectToServer({
-                "server_url": serverURL,
-                "token": token
-            });
-            setUser(server.config.user);
-            console.log("Logged in as:", server.config.user);
-        };
-
-        const updateFileList = async (dirHandle, setFileList, setLoading) => {
-            setLoading(true);
-            try {
-                const files = [];
-                for await (const entry of dirHandle.values()) {
-                    if (entry.kind === 'file') {
-                        files.push(entry.name);
+            const login = async () => {
+                let token = localStorage.getItem('token');
+                if (token) {
+                    const tokenExpiry = localStorage.getItem('tokenExpiry');
+                    if (tokenExpiry && new Date(tokenExpiry) > new Date()) {
+                        console.log("Using saved token:", token);
+                        return token;
                     }
                 }
-                setFileList(files.sort()); // Sort files alphabetically
-            } catch (error) {
-                console.error("Error updating file list:", error);
-            } finally {
-                setLoading(false);
+                token = await hyphaWebsocketClient.login({
+                    "server_url": serverURL,
+                    "login_callback": loginCallback,
+                });
+                localStorage.setItem('token', token);
+                localStorage.setItem('tokenExpiry', new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString());
+                return token;
             }
-        };
 
-        const mountFolder = async () => {
-            try {
-                const dirHandle = await window.showDirectoryPicker();
-                setImageFolderHandle(dirHandle);
-                await updateFileList(dirHandle, setImageList, setIsLoadingImages); // Update image list
-                console.log("Mounted folder:", dirHandle.name);
-            } catch (error) {
-                console.error("Error accessing folder:", error);
-            }
-        };
+            const handleLogin = async () => {
+                const token = await login();
+                const server = await hyphaWebsocketClient.connectToServer({
+                    "server_url": serverURL,
+                    "token": token
+                });
+                setUser(server.config.user);
+                console.log("Logged in as:", server.config.user);
+            };
 
-        // const checkAnnotationURL = async () => {
-        //     const intervalId = setInterval(() => {
-        //         const url = localStorage.getItem('annotationURL');
-        //         if (url) {
-        //             setAnnotationURL(url);
-        //             clearInterval(intervalId); // Stop checking once the URL is available
-        //         }
-        //     }, 1000);
-        // };
-
-        const deployAnnotationSession = async () => {
-            if (imageFolderHandle) {
+            const updateFileList = async (dirHandle, setFileList, setLoading) => {
+                setLoading(true);
                 try {
-                    const annotationsFolder = await imageFolderHandle.getDirectoryHandle('annotations', { create: true });
-                    setAnnotationsFolderHandle(annotationsFolder);
-                    await updateFileList(annotationsFolder, setAnnotationsList, setIsLoadingAnnotations);
-                    console.log("Created annotations folder:", annotationsFolder.name);
+                    const files = [];
+                    for await (const entry of dirHandle.values()) {
+                        if (entry.kind === 'file') {
+                            files.push(entry.name);
+                        }
+                    }
+                    setFileList(files.sort()); // Sort files alphabetically
                 } catch (error) {
-                    console.error("Error creating annotations folder:", error);
+                    console.error("Error updating file list:", error);
+                } finally {
+                    setLoading(false);
                 }
+            };
 
-                // checkAnnotationURL();  // Start checking for Annotation URL every 1000ms
+            const mountFolder = async () => {
+                try {
+                    const dirHandle = await window.showDirectoryPicker();
+                    setImageFolderHandle(dirHandle);
+                } catch (error) {
+                    console.error("Error accessing folder:", error);
+                }
+            };
 
-                // Run code to start annotation session
-                const code = await fetch(`./${REGISTER_SERVICE_FILE}`).then(response => response.text());
-                await runCode(code);
-            }
-        };
+            useEffect(() => {
+                if (imageFolderHandle) {
+                    window.saveToDB('imageFolderDirHandle', imageFolderHandle);
+                    updateFileList(imageFolderHandle, setImageList, setIsLoadingImages); // Update image list
+                    console.log("Mounted folder:", imageFolderHandle.name);
+                }
+            }, [imageFolderHandle]);
 
-        const shareAnnotationURL = async () => {
-            if (!annotationURL) return;
+            // const checkAnnotationURL = async () => {
+            //     const intervalId = setInterval(() => {
+            //         const url = localStorage.getItem('annotationURL');
+            //         if (url) {
+            //             setAnnotationURL(url);
+            //             clearInterval(intervalId); // Stop checking once the URL is available
+            //         }
+            //     }, 1000);
+            // };
 
-            setCopyFeedback("Copying Annotation URL...");
-            // Disable button while copying
-            const button = document.querySelector("#share-url-button");
-            button.disabled = true;
+            const deployAnnotationSession = async () => {
+                if (imageFolderHandle) {
+                    try {
+                        const annotationsFolder = await imageFolderHandle.getDirectoryHandle('annotations', { create: true });
+                        setAnnotationsFolderHandle(annotationsFolder);
+                        await updateFileList(annotationsFolder, setAnnotationsList, setIsLoadingAnnotations);
+                        console.log("Created annotations folder:", annotationsFolder.name);
+                    } catch (error) {
+                        console.error("Error creating annotations folder:", error);
+                    }
+                    // Run code to start annotation session
+                    const code = await fetch(`./${REGISTER_SERVICE_FILE}`).then(response => response.text());
+                    try {
+                        setIsRunning(true);
+                        await workerPromise;
+                        await runCode(code);
+                        const server_url = serverURL;
+                        const token = localStorage.getItem('token');
+                        if (!token) {
+                            alert("Please login first");
+                            return;
+                        }
+                        const outputs = await runCode(`await register_service("${server_url}", "${token}")`);
+                        // find an output which contains type=service
+                        const serviceOutput = outputs.find(output => output.type === 'service');
+                        if (serviceOutput) {
+                            const annotationURL = serviceOutput.content;
+                            setAnnotationURL(annotationURL);
+                        }
+                        await runCode(`import asyncio; loop = asyncio.get_event_loop(); loop.run_forever()`);
+                    }
+                    catch (error) {
+                        console.error("Error running code:", error);
+                    }
+                    finally {
+                        setIsRunning(false);
+                    }
+                }
+                else {
+                    alert("Please mount a folder first");
+                }
+            };
 
-            try {
-                await navigator.clipboard.writeText(annotationURL);
-                setTimeout(() => {
-                    setCopyFeedback("Copied Annotation URL!");
-                    // Re-enable button after feedback time
+            const shareAnnotationURL = async () => {
+                if (!annotationURL) return;
+
+                setCopyFeedback("Copying Annotation URL...");
+                // Disable button while copying
+                const button = document.querySelector("#share-url-button");
+                button.disabled = true;
+
+                try {
+                    await navigator.clipboard.writeText(annotationURL);
                     setTimeout(() => {
-                        setCopyFeedback("");
-                        button.disabled = false;
-                    }, 5000);
-                }, 1000);
-            } catch (err) {
-                console.error("Failed to copy annotation URL:", err);
-                setCopyFeedback("");
-                button.disabled = false;
-            }
-        };
+                        setCopyFeedback("Copied Annotation URL!");
+                        // Re-enable button after feedback time
+                        setTimeout(() => {
+                            setCopyFeedback("");
+                            button.disabled = false;
+                        }, 5000);
+                    }, 1000);
+                } catch (err) {
+                    console.error("Failed to copy annotation URL:", err);
+                    setCopyFeedback("");
+                    button.disabled = false;
+                }
+            };
 
-        return (
-            <div className="flex h-screen">
-                <Sidebar
-                    onLogin={handleLogin}
-                    user={user}
-                    activeTab={activeTab}
-                    onTabClick={setActiveTab}
-                    annotationURL={annotationURL} // Just for testing, remove later on
-                />
-                <div className="flex-1 p-4">
-                    <h2 className="text-2xl font-bold mb-4" style={{ height: '2rem', overflow: 'hidden' }}>
-                        Crowd-sourcing Annotation Tool
-                    </h2>
-                    {isLoadingWorker ? (
-                        <div className="flex justify-center items-center h-full">
-                            <div className="spinner-border"></div>
-                        </div>
-                    ) : (
-                        <>  
-                            {activeTab === "Local Deployment" && (
-                                <>  
-                                    <div className="text-base text-gray-700 mb-4" style={{ height: '5rem', overflowY: 'auto' }}>
-                                        <p>
-                                            First, <strong>mount a local folder</strong> to store your images. Your data stays in the browser, ensuring you keep full control. Next, <strong>deploy the data service</strong> from your browser, which will create an "annotations" folder for saving annotation masks. Finally, <strong>share the annotator URL</strong>.
-                                        </p>
-                                        <p className="mt-2">
-                                            <strong>Note:</strong> Closing this tab stops the annotation deployment. Use "Remote Deployments" to keep sessions running.
-                                        </p>
-                                    </div>
-                                    <div className="flex items-center mb-4">
-                                        <div className="text-xl font-semibold mr-2">1.</div>
-                                        <button 
-                                            className="bg-purple text-white px-4 py-2 rounded-md"
-                                            onClick={mountFolder}
-                                        >
-                                            Mount Local Folder
-                                        </button>
-                                        <span className="mx-2 text-xl">→</span>
-
-                                        <div className="text-xl font-semibold mr-2">2.</div>
-                                        <button 
-                                            className={`${imageFolderHandle ? "bg-purple" : "bg-disabled-button"} text-white px-4 py-2 rounded-md`}
-                                            onClick={deployAnnotationSession}
-                                            disabled={!imageFolderHandle}
-                                        >
-                                            Deploy Annotation Session
-                                        </button>
-                                        <span className="mx-2 text-xl">→</span>
-
-                                        <div className="text-xl font-semibold mr-2">3.</div>
-                                        <button 
-                                            id="share-url-button"
-                                            className={`${annotationURL ? "bg-purple" : "bg-disabled-button"} text-white px-4 py-2 rounded-md`}
-                                            onClick={shareAnnotationURL}
-                                            disabled={!annotationURL}
-                                        >
-                                            {copyFeedback || "Share Annotation URL"}
-                                        </button>
-                                    </div>
-
-                                    <div className="flex space-x-4">
-                                        {imageFolderHandle && (
-                                            <div className="bg-blue w-1/2 p-4 rounded-md overflow-auto"
-                                                style={{ maxHeight: 'calc(100vh - 226px)', width: '50%' }}>
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <h2 className="text-xl font-semibold">Number of Images: ({imageList.length})</h2>
-                                                    <button onClick={() => updateFileList(imageFolderHandle, setImageList, setIsLoadingImages)}>
-                                                        <i className="fas fa-sync-alt text-white"></i>
-                                                    </button>
-                                                </div>
-                                                {isLoadingImages ? (
-                                                    <div className="flex justify-center items-center h-full">
-                                                        <div className="spinner-border"></div>
-                                                    </div>
-                                                ) : (
-                                                    <ul>
-                                                        {imageList.length > 0 ? (
-                                                            imageList.map((file, index) => (
-                                                                <li key={index} className="text-white">{file}</li>
-                                                            ))
-                                                        ) : (
-                                                            <li className="text-white">No files found.</li>
-                                                        )}
-                                                    </ul>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {annotationsFolderHandle && (
-                                            <div className="w-1/2 bg-blue p-4 rounded-md overflow-auto"
-                                                style={{ maxHeight: 'calc(100vh - 226px)', width: '50%' }}>
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <h2 className="text-xl font-semibold">Number of Annotations: ({annotationsList.length})</h2>
-                                                    <button onClick={() => updateFileList(annotationsFolderHandle, setAnnotationsList, setIsLoadingAnnotations)}>
-                                                        <i className="fas fa-sync-alt text-white"></i>
-                                                    </button>
-                                                </div>
-                                                {isLoadingAnnotations ? (
-                                                    <div className="flex justify-center items-center h-full">
-                                                        <div className="spinner-border"></div>
-                                                    </div>
-                                                ) : (
-                                                    <ul>
-                                                        {annotationsList.length > 0 ? (
-                                                            annotationsList.map((file, index) => (
-                                                                <li key={index} className="text-white">{file}</li>
-                                                            ))
-                                                        ) : (
-                                                            <li className="text-white">No files found.</li>
-                                                        )}
-                                                    </ul>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                </>
-                            )}
-
-                            {activeTab === "Remote Deployment" && (
-                                <div className="flex justify-center items-center h-full">
-                                    <div className="text-xl flex items-center">
-                                        <i className="fas fa-tools mr-2"></i>
-                                        <span className="font-semibold">Remote Deployment</span>&nbsp;is coming soon.
-                                    </div>
+            return (
+                <div className="flex h-screen">
+                    <Sidebar
+                        onLogin={handleLogin}
+                        user={user}
+                        activeTab={activeTab}
+                        onTabClick={setActiveTab}
+                        annotationURL={annotationURL} // Just for testing, remove later on
+                    />
+                    <div className="flex-1 p-4">
+                        <h2 className="text-2xl font-bold mb-4" style={{ height: '2rem', overflow: 'hidden' }}>
+                            Crowd-sourcing Annotation Tool
+                        </h2>
+                        {isRunning && (
+                            <div className="floating-spinner">
+                                <div className="spinner-border"></div>
+                            </div>
+                        )}
+                        {activeTab === "Local Deployment" && (
+                            <>
+                                <div className="text-base text-gray-700 mb-4" style={{ height: '5rem', overflowY: 'auto' }}>
+                                    <p>
+                                        First, <strong>mount a local folder</strong> to store your images. Your data stays in the browser, ensuring you keep full control. Next, <strong>deploy the data service</strong> from your browser, which will create an "annotations" folder for saving annotation masks. Finally, <strong>share the annotator URL</strong>.
+                                    </p>
+                                    <p className="mt-2">
+                                        <strong>Note:</strong> Closing this tab stops the annotation deployment. Use "Remote Deployments" to keep sessions running.
+                                    </p>
                                 </div>
-                            )}
+                                <div className="flex items-center mb-4">
+                                    <div className="text-xl font-semibold mr-2">1.</div>
+                                    <button
+                                        className="bg-purple text-white px-4 py-2 rounded-md"
+                                        onClick={mountFolder}
+                                    >
+                                        Mount Local Folder
+                                    </button>
+                                    <span className="mx-2 text-xl">→</span>
 
-                            {activeTab === "Browse Deployments" && (
-                                <div className="flex justify-center items-center h-full">
-                                    <div className="text-xl flex items-center">
-                                        <i className="fas fa-tools mr-2"></i>
-                                        <span className="font-semibold">Browse Deployments</span>&nbsp;is coming soon.
-                                    </div>
+                                    <div className="text-xl font-semibold mr-2">2.</div>
+                                    <button
+                                        className={`${imageFolderHandle ? "bg-purple" : "bg-disabled-button"} text-white px-4 py-2 rounded-md`}
+                                        onClick={deployAnnotationSession}
+                                        disabled={!imageFolderHandle}
+                                    >
+                                        Deploy Annotation Session
+                                    </button>
+                                    <span className="mx-2 text-xl">→</span>
+
+                                    <div className="text-xl font-semibold mr-2">3.</div>
+                                    <button
+                                        id="share-url-button"
+                                        className={`${annotationURL ? "bg-purple" : "bg-disabled-button"} text-white px-4 py-2 rounded-md`}
+                                        onClick={shareAnnotationURL}
+                                        disabled={!annotationURL}
+                                    >
+                                        {copyFeedback || "Share Annotation URL"}
+                                    </button>
                                 </div>
-                            )}
+
+                                <div className="flex space-x-4">
+                                    {imageFolderHandle && (
+                                        <div className="bg-blue w-1/2 p-4 rounded-md overflow-auto"
+                                            style={{ maxHeight: 'calc(100vh - 226px)', width: '50%' }}>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <h2 className="text-xl font-semibold">Number of Images: ({imageList.length})</h2>
+                                                <button onClick={() => updateFileList(imageFolderHandle, setImageList, setIsLoadingImages)}>
+                                                    <i className="fas fa-sync-alt text-white"></i>
+                                                </button>
+                                            </div>
+                                            {isLoadingImages ? (
+                                                <div className="flex justify-center items-center h-full">
+                                                    <div className="spinner-border"></div>
+                                                </div>
+                                            ) : (
+                                                <ul>
+                                                    {imageList.length > 0 ? (
+                                                        imageList.map((file, index) => (
+                                                            <li key={index} className="text-white">{file}</li>
+                                                        ))
+                                                    ) : (
+                                                        <li className="text-white">No files found.</li>
+                                                    )}
+                                                </ul>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {annotationsFolderHandle && (
+                                        <div className="w-1/2 bg-blue p-4 rounded-md overflow-auto"
+                                            style={{ maxHeight: 'calc(100vh - 226px)', width: '50%' }}>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <h2 className="text-xl font-semibold">Number of Annotations: ({annotationsList.length})</h2>
+                                                <button onClick={() => updateFileList(annotationsFolderHandle, setAnnotationsList, setIsLoadingAnnotations)}>
+                                                    <i className="fas fa-sync-alt text-white"></i>
+                                                </button>
+                                            </div>
+                                            {isLoadingAnnotations ? (
+                                                <div className="flex justify-center items-center h-full">
+                                                    <div className="spinner-border"></div>
+                                                </div>
+                                            ) : (
+                                                <ul>
+                                                    {annotationsList.length > 0 ? (
+                                                        annotationsList.map((file, index) => (
+                                                            <li key={index} className="text-white">{file}</li>
+                                                        ))
+                                                    ) : (
+                                                        <li className="text-white">No files found.</li>
+                                                    )}
+                                                </ul>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )}
+
+                        {activeTab === "Remote Deployment" && (
+                            <div className="flex justify-center items-center h-full">
+                                <div className="text-xl flex items-center">
+                                    <i className="fas fa-tools mr-2"></i>
+                                    <span className="font-semibold">Remote Deployment</span>&nbsp;is coming soon.
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === "Browse Deployments" && (
+                            <div className="flex justify-center items-center h-full">
+                                <div className="text-xl flex items-center">
+                                    <i className="fas fa-tools mr-2"></i>
+                                    <span className="font-semibold">Browse Deployments</span>&nbsp;is coming soon.
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        function Sidebar({ onLogin, user, activeTab, onTabClick, annotationURL }) {
+            return (
+                <div className="bg-blue w-64 text-white p-4 relative">
+                    <h1 className="text-xl font-semibold mb-4 text-center">Navigation</h1>
+
+                    <div className="flex justify-center mb-4">
+                        {user.email ? (
+                            <span className="text-white py-2 rounded-md">
+                                Welcome, {user.email}
+                            </span>
+                        ) : (
+                            <button
+                                className="bg-turquoise text-white px-10 py-2 rounded-md"
+                                onClick={onLogin}
+                            >
+                                Login
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="separator"></div>
+
+                    <ul>
+                        <li
+                            className={`mb-2 p-2 rounded-md cursor-pointer ${activeTab === "Local Deployment" ? "tab-active" : "bg-turquoise-hover"}`}
+                            onClick={() => onTabClick("Local Deployment")}
+                        >
+                            <a href="#" className="text-white">Local Deployment</a>
+                        </li>
+                        <li
+                            className={`mb-2 p-2 rounded-md cursor-pointer ${activeTab === "Remote Deployment" ? "tab-active" : "bg-turquoise-hover"}`}
+                            onClick={() => onTabClick("Remote Deployment")}
+                        >
+                            <a href="#" className="text-white">Remote Deployment</a>
+                        </li>
+                        <li
+                            className={`mb-2 p-2 rounded-md cursor-pointer ${activeTab === "Browse Deployments" ? "tab-active" : "bg-turquoise-hover"}`}
+                            onClick={() => onTabClick("Browse Deployments")}
+                        >
+                            <a href="#" className="text-white">Browse Deployments</a>
+                        </li>
+                    </ul>
+
+                    {annotationURL && (
+                        // Just for testing, remove later on
+                        <>
+                            <div className="separator"></div>
+                            <span className="text-white py-2 rounded-md">
+                                Annotation URL: {annotationURL}
+                            </span>
                         </>
                     )}
+
                 </div>
-            </div>
-        );
-    }
+            );
+        }
 
-    function Sidebar({ onLogin, user, activeTab, onTabClick, annotationURL }) {
-        return (
-            <div className="bg-blue w-64 text-white p-4 relative">
-                <h1 className="text-xl font-semibold mb-4 text-center">Navigation</h1>
-
-                <div className="flex justify-center mb-4">
-                    {user.email ? (
-                        <span className="text-white py-2 rounded-md">
-                            Welcome, {user.email}
-                        </span>
-                    ) : (
-                        <button 
-                            className="bg-turquoise text-white px-10 py-2 rounded-md"
-                            onClick={onLogin}
-                        >
-                            Login
-                        </button>
-                    )}
-                </div>
-
-                <div className="separator"></div>
-                
-                <ul>
-                    <li 
-                    className={`mb-2 p-2 rounded-md cursor-pointer ${activeTab === "Local Deployment" ? "tab-active" : "bg-turquoise-hover"}`}
-                        onClick={() => onTabClick("Local Deployment")}
-                    >
-                        <a href="#" className="text-white">Local Deployment</a>
-                    </li>
-                    <li 
-                        className={`mb-2 p-2 rounded-md cursor-pointer ${activeTab === "Remote Deployment" ? "tab-active" : "bg-turquoise-hover"}`}
-                        onClick={() => onTabClick("Remote Deployment")}
-                    >
-                        <a href="#" className="text-white">Remote Deployment</a>
-                    </li>
-                    <li 
-                        className={`mb-2 p-2 rounded-md cursor-pointer ${activeTab === "Browse Deployments" ? "tab-active" : "bg-turquoise-hover"}`}
-                        onClick={() => onTabClick("Browse Deployments")}
-                    >
-                        <a href="#" className="text-white">Browse Deployments</a>
-                    </li>
-                </ul>
-                
-                {annotationURL && (
-                    // Just for testing, remove later on
-                    <>
-                    <div className="separator"></div>
-                    <span className="text-white py-2 rounded-md">
-                        Annotation URL: {annotationURL}
-                    </span>
-                    </>
-                )}
-                
-            </div>
-        );
-    }
-
-    ReactDOM.render(<App />, document.getElementById('app'));
-</script>
+        ReactDOM.render(<App />, document.getElementById('app'));
+    </script>
 </body>
+
 </html>

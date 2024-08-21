@@ -63,9 +63,9 @@ def upload_image_to_s3():
     raise NotImplementedError
 
 
-async def register_service():
+async def register_service(server_url, token):
     # Connect to the server link
-    server = await connect_to_server({"server_url": SERVER_URL})
+    server = await connect_to_server({"server_url": server_url, "token": token})
 
     # Generate token for the current workspace
     token = await server.generate_token()
@@ -114,8 +114,3 @@ async def register_service():
     # Option 5: Send the annotator URL via hypha service
     # requires the registration of a service in the main thread
 
-
-# Start the service
-loop = asyncio.get_event_loop()
-loop.create_task(register_service())
-loop.run_forever()
