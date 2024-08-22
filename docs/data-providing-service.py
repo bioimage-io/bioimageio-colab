@@ -1,6 +1,7 @@
 import os
+import json
 from functools import partial
-from typing import List, Tuple
+from typing import Tuple
 
 import numpy as np
 from hypha_rpc import connect_to_server
@@ -58,10 +59,17 @@ def upload_image_to_s3():
 async def register_service(
     server_url: str,
     token: str,
-    image_folder: str,
-    annotations_folder: str,
-    supported_file_types: List[str],
+    images_path: str,
+    supported_file_types_json: str,
 ):
+    # Check if the images folder exists
+    # if not os.path.isdir(images_path):
+    #     raise FileNotFoundError("Images path not found: " + images_path)
+    annotations_path = os.path.join(images_path, "annotations")
+
+    # Decode the JSON string to a Python tuple
+    supported_file_types = tuple(json.loads(supported_file_types_json))
+
     # Connect to the server link
     server = await connect_to_server({"server_url": server_url, "token": token})
 
@@ -78,10 +86,10 @@ async def register_service(
             # get a random image from the dataset
             # returns the image as a numpy image
             "get_random_image": partial(
-                get_random_image, image_folder, tuple(supported_file_types)
+                get_random_image, images_path, supported_file_types
             ),
             # save the annotation mask
             # pass the filename of the image, the new filename, the features and the image shape
-            "save_annotation": partial(save_annotation, annotations_folder),
+            "save_annotation": partial(save_annotation, annotations_path),
         }
     )

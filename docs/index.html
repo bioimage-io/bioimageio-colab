@@ -116,6 +116,7 @@
         const serviceFile = "data-providing-service.py";
         const pluginUrl = "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/plugins/bioimageio-colab-annotator.imjoy.html";
         let workerPromise;
+        let workerManager;
 
         function App() {
             const [user, setUser] = useState({});
@@ -136,7 +137,7 @@
             useEffect(() => {
                 // Create a new Pyodide worker
                 workerPromise = new Promise((resolve, reject) => {
-                    const workerManager = new PyodideWorkerManager();
+                    workerManager = new PyodideWorkerManager();
                     workerManager.createWorker().then(worker => {
                         resolve(worker);
                     }).catch(error => {
@@ -193,13 +194,22 @@
 
             const handleLogin = async () => {
                 const token = await login();
-                const server = await hyphaWebsocketClient.connectToServer({
-                    "server_url": serverUrl,
-                    "token": token,
-                });
-                setHyphaVersion(server.config.hyphaVersion);
-                setUser(server.config.user);
-                console.log("Logged in as:", server.config.user);
+                try {
+                    const server = await hyphaWebsocketClient.connectToServer({
+                        "server_url": serverUrl,
+                        "token": token,
+                    });
+                    setHyphaVersion(server.config.hyphaVersion);
+                    setUser(server.config.user);
+                    console.log("Logged in as:", server.config.user);
+                } catch (error) {
+                    console.error("Error connecting to server:", error);
+                    // Clear token and tokenExpiry
+                    localStorage.setItem("token", "");
+                    localStorage.setItem("tokenExpiry", "");
+                    // Retry login
+                    handleLogin();
+                }
             };
 
             const updateFileList = async (dirHandle, setFileList, setLoading) => {
@@ -241,6 +251,13 @@
                 }
             }, [imageFolderHandle]);
 
+            const joinPaths = (...paths) => {
+                return paths
+                    .map(path => path.replace(/\\/g, '/')) // Normalize backslashes to forward slashes
+                    .map(path => path.replace(/\/+$/, '')) // Remove trailing slashes
+                    .join('/');
+            }
+
             const deployAnnotationSession = async () => {
                 // Check if user is logged in
                 if (!user.email) {
@@ -265,8 +282,11 @@
                     const code = await fetch(`./${serviceFile}`).then(response => response.text());
                     await runCode(code);
                     // Register the service
+                    const imagesPath = joinPaths(workerManager.mountPoint, imageFolderHandle.name);
+                    console.log("Images path:", imagesPath);
+                    const supportedFileTypesJson = JSON.stringify(supportedFileTypes).replace(/"/g, '\\"');
                     const outputs = await runCode(
-                        `await register_service("${serverUrl}", "${token}", "/mnt", "/mnt/annotations", "${supportedFileTypes}")`
+                        `await register_service("${serverUrl}", "${token}", "${imagesPath}", "${supportedFileTypesJson}")`
                     );
                     // Find an output which contains type=service
                     const serviceOutput = outputs.find(output => output.type === "service");
