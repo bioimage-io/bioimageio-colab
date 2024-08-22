@@ -59,13 +59,15 @@ def upload_image_to_s3():
 async def register_service(
     server_url: str,
     token: str,
-    images_path: str,
     supported_file_types_json: str,
 ):
+    # Define path to images and annotations
+    images_path = "/mnt"
+    annotations_path = "/mnt/annotations"
+
     # Check if the images folder exists
-    # if not os.path.isdir(images_path):
-    #     raise FileNotFoundError("Images path not found: " + images_path)
-    annotations_path = os.path.join(images_path, "annotations")
+    if not os.path.isdir(images_path):
+        raise FileNotFoundError("Mounted images folder not found")
 
     # Decode the JSON string to a Python tuple
     supported_file_types = tuple(json.loads(supported_file_types_json))

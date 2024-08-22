@@ -116,7 +116,6 @@
         const serviceFile = "data-providing-service.py";
         const pluginUrl = "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/plugins/bioimageio-colab-annotator.imjoy.html";
         let workerPromise;
-        let workerManager;
 
         function App() {
             const [user, setUser] = useState({});
@@ -137,7 +136,7 @@
             useEffect(() => {
                 // Create a new Pyodide worker
                 workerPromise = new Promise((resolve, reject) => {
-                    workerManager = new PyodideWorkerManager();
+                    const workerManager = new PyodideWorkerManager();
                     workerManager.createWorker().then(worker => {
                         resolve(worker);
                     }).catch(error => {
@@ -251,13 +250,6 @@
                 }
             }, [imageFolderHandle]);
 
-            const joinPaths = (...paths) => {
-                return paths
-                    .map(path => path.replace(/\\/g, '/')) // Normalize backslashes to forward slashes
-                    .map(path => path.replace(/\/+$/, '')) // Remove trailing slashes
-                    .join('/');
-            }
-
             const deployAnnotationSession = async () => {
                 // Check if user is logged in
                 if (!user.email) {
@@ -281,12 +273,13 @@
                     // Load the service code
                     const code = await fetch(`./${serviceFile}`).then(response => response.text());
                     await runCode(code);
+                    // Mount the image folder to the pyodide worker
+                    const pyodideWorker = await workerPromise;
+                    await pyodideWorker.mount("/mnt", imageFolderHandle);
                     // Register the service
-                    const imagesPath = joinPaths(workerManager.mountPoint, imageFolderHandle.name);
-                    console.log("Images path:", imagesPath);
                     const supportedFileTypesJson = JSON.stringify(supportedFileTypes).replace(/"/g, '\\"');
                     const outputs = await runCode(
-                        `await register_service("${serverUrl}", "${token}", "${imagesPath}", "${supportedFileTypesJson}")`
+                        `await register_service("${serverUrl}", "${token}", "${supportedFileTypesJson}")`
                     );
                     // Find an output which contains type=service
                     const serviceOutput = outputs.find(output => output.type === "service");
