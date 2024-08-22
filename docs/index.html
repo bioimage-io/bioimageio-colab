@@ -59,13 +59,14 @@
 
         .spinner-border {
             border: 4px solid rgba(0, 0, 0, 0.1);
-            border-left-color: var(--color-purple);
+            border-left-color: var(--color-turquoise);
             border-radius: 50%;
             width: 2rem;
             height: 2rem;
             animation: spin 1s infinite linear;
         }
-        .floating-spinner{
+
+        .floating-spinner {
             position: fixed;
             top: 0;
             left: 0;
@@ -74,9 +75,10 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            background-color: rgba(0, 0, 0, 0.1); /* Optional: for a semi-transparent background */
-            z-index: 9999 /* Ensure it is on top of other elements */
-
+            /* Optional: for a semi-transparent background */
+            background-color: rgba(0, 0, 0, 0.1);
+            /* Ensure it is on top of other elements */
+            z-index: 9999
         }
 
         @keyframes spin {
@@ -101,7 +103,7 @@
 
 <body>
     <script type="module">
-        import { get, set } from 'https://cdn.jsdelivr.net/npm/idb-keyval@6/+esm';
+        import { get, set } from "https://cdn.jsdelivr.net/npm/idb-keyval@6/+esm";
         window.getFromDB = get;
         window.saveToDB = set;
     </script>
@@ -110,42 +112,47 @@
 
         const { useState, useEffect } = React;
 
-        const REGISTER_SERVICE_FILE = 'services.py';
+        const serverUrl = "wss://hypha.aicell.io/ws";
+        const serviceFile = "data-providing-service.py";
+        const pluginUrl = "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/plugins/bioimageio-colab-annotator.imjoy.html";
         let workerPromise;
+
         function App() {
-            const [serverURL, setServerURL] = useState("wss://hypha.aicell.io/ws");
-            const [pyodideOutput, setPyodideOutput] = useState([]);
             const [user, setUser] = useState({});
+            const [hyphaVersion, setHyphaVersion] = useState("");
+            const [isRunning, setIsRunning] = useState(false);
+            const [pyodideOutput, setPyodideOutput] = useState([]);
+            const [supportedFileTypes, setSupportedFileTypes] = useState([".tiff", ".tif"]);
             const [imageFolderHandle, setImageFolderHandle] = useState(null);
             const [imageList, setImageList] = useState([]);
+            const [isLoadingImages, setIsLoadingImages] = useState(false);
             const [annotationsFolderHandle, setAnnotationsFolderHandle] = useState(null);
             const [annotationsList, setAnnotationsList] = useState([]);
-            const [isRunning, setIsRunning] = useState(false);
-            const [isLoadingImages, setIsLoadingImages] = useState(false);
             const [isLoadingAnnotations, setIsLoadingAnnotations] = useState(false);
-            const [annotationURL, setAnnotationURL] = useState("placeholder");
+            const [annotationURL, setAnnotationURL] = useState("");
             const [copyFeedback, setCopyFeedback] = useState("");
             const [activeTab, setActiveTab] = useState("Local Deployment");
 
             useEffect(() => {
+                // Create a new Pyodide worker
                 workerPromise = new Promise((resolve, reject) => {
                     const workerManager = new PyodideWorkerManager();
                     workerManager.createWorker().then(worker => {
-                        setIsRunning(false);
                         resolve(worker);
                     }).catch(error => {
                         console.error("Error creating Pyodide worker:", error);
                         reject(error);
                     });
                 });
-                window.getFromDB('imageFolderDirHandle').then((dirHandle) => {
+                // Get image folder handle from IndexedDB
+                window.getFromDB("imageFolderDirHandle").then((dirHandle) => {
                     if (dirHandle) setImageFolderHandle(dirHandle); // Set image folder handle
                 });
             }, []);
 
             const runCode = async (code) => {
                 const pyodideWorker = await workerPromise;
-                console.log("Running code:\n-------------\n", code);  // TODO: Remove this line
+                console.log("Running code:\n----------\n", code);
                 try {
                     const result = await pyodideWorker.runScript(code);
                     handleResult(result);
@@ -157,8 +164,8 @@
             };
 
             const handleResult = (result) => {
-                const stdout = result.filter(r => r.type === 'stdout').map(r => r.content).join("");
-                const stderr = result.filter(r => r.type === 'stderr').map(r => r.content).join("");
+                const stdout = result.filter(r => r.type === "stdout").map(r => r.content).join("");
+                const stderr = result.filter(r => r.type === "stderr").map(r => r.content).join("");
                 setPyodideOutput([stdout, stderr].filter(Boolean));
             };
 
@@ -167,29 +174,30 @@
             }
 
             const login = async () => {
-                let token = localStorage.getItem('token');
+                let token = localStorage.getItem("token");
                 if (token) {
-                    const tokenExpiry = localStorage.getItem('tokenExpiry');
+                    const tokenExpiry = localStorage.getItem("tokenExpiry");
                     if (tokenExpiry && new Date(tokenExpiry) > new Date()) {
-                        console.log("Using saved token:", token);
+                        console.log("Using saved token:\n----------\n", token);
                         return token;
                     }
                 }
                 token = await hyphaWebsocketClient.login({
-                    "server_url": serverURL,
+                    "server_url": serverUrl,
                     "login_callback": loginCallback,
                 });
-                localStorage.setItem('token', token);
-                localStorage.setItem('tokenExpiry', new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString());
+                localStorage.setItem("token", token);
+                localStorage.setItem("tokenExpiry", new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString());
                 return token;
             }
 
             const handleLogin = async () => {
                 const token = await login();
                 const server = await hyphaWebsocketClient.connectToServer({
-                    "server_url": serverURL,
-                    "token": token
+                    "server_url": serverUrl,
+                    "token": token,
                 });
+                setHyphaVersion(server.config.hyphaVersion);
                 setUser(server.config.user);
                 console.log("Logged in as:", server.config.user);
             };
@@ -199,13 +207,17 @@
                 try {
                     const files = [];
                     for await (const entry of dirHandle.values()) {
-                        if (entry.kind === 'file') {
-                            files.push(entry.name);
+                        if (entry.kind === "file") {
+                            const fileType = entry.name.slice(entry.name.lastIndexOf(".")).toLowerCase();
+                            if (supportedFileTypes.includes(fileType)) {
+                                files.push(entry.name);
+                            }
                         }
                     }
                     setFileList(files.sort()); // Sort files alphabetically
                 } catch (error) {
                     console.error("Error updating file list:", error);
+                    throw error;
                 } finally {
                     setLoading(false);
                 }
@@ -217,67 +229,68 @@
                     setImageFolderHandle(dirHandle);
                 } catch (error) {
                     console.error("Error accessing folder:", error);
+                    throw error;
                 }
             };
 
             useEffect(() => {
                 if (imageFolderHandle) {
-                    window.saveToDB('imageFolderDirHandle', imageFolderHandle);
+                    window.saveToDB("imageFolderDirHandle", imageFolderHandle);
                     updateFileList(imageFolderHandle, setImageList, setIsLoadingImages); // Update image list
                     console.log("Mounted folder:", imageFolderHandle.name);
                 }
             }, [imageFolderHandle]);
 
-            // const checkAnnotationURL = async () => {
-            //     const intervalId = setInterval(() => {
-            //         const url = localStorage.getItem('annotationURL');
-            //         if (url) {
-            //             setAnnotationURL(url);
-            //             clearInterval(intervalId); // Stop checking once the URL is available
-            //         }
-            //     }, 1000);
-            // };
-
             const deployAnnotationSession = async () => {
-                if (imageFolderHandle) {
-                    try {
-                        const annotationsFolder = await imageFolderHandle.getDirectoryHandle('annotations', { create: true });
-                        setAnnotationsFolderHandle(annotationsFolder);
-                        await updateFileList(annotationsFolder, setAnnotationsList, setIsLoadingAnnotations);
-                        console.log("Created annotations folder:", annotationsFolder.name);
-                    } catch (error) {
-                        console.error("Error creating annotations folder:", error);
-                    }
-                    // Run code to start annotation session
-                    const code = await fetch(`./${REGISTER_SERVICE_FILE}`).then(response => response.text());
-                    try {
-                        setIsRunning(true);
-                        await workerPromise;
-                        await runCode(code);
-                        const server_url = serverURL;
-                        const token = localStorage.getItem('token');
-                        if (!token) {
-                            alert("Please login first");
-                            return;
-                        }
-                        const outputs = await runCode(`await register_service("${server_url}", "${token}")`);
-                        // find an output which contains type=service
-                        const serviceOutput = outputs.find(output => output.type === 'service');
-                        if (serviceOutput) {
-                            const annotationURL = serviceOutput.content;
-                            setAnnotationURL(annotationURL);
-                        }
-                        await runCode(`import asyncio; loop = asyncio.get_event_loop(); loop.run_forever()`);
-                    }
-                    catch (error) {
-                        console.error("Error running code:", error);
-                    }
-                    finally {
-                        setIsRunning(false);
-                    }
+                // Check if user is logged in
+                if (!user.email) {
+                    alert("Please login first");
+                    return;
                 }
-                else {
-                    alert("Please mount a folder first");
+                const token = localStorage.getItem("token");
+                // Create annotations folder
+                try {
+                    const annotationsFolder = await imageFolderHandle.getDirectoryHandle("annotations", { create: true });
+                    setAnnotationsFolderHandle(annotationsFolder);
+                    await updateFileList(annotationsFolder, setAnnotationsList, setIsLoadingAnnotations);
+                    console.log("Created annotations folder:", annotationsFolder.name);
+                } catch (error) {
+                    console.error("Error creating annotations folder:", error);
+                    throw error;
+                }
+                // Start annotation session
+                try {
+                    setIsRunning(true);
+                    // Load the service code
+                    const code = await fetch(`./${serviceFile}`).then(response => response.text());
+                    await runCode(code);
+                    // Register the service
+                    const outputs = await runCode(
+                        `await register_service("${serverUrl}", "${token}", "/mnt", "/mnt/annotations", "${supportedFileTypes}")`
+                    );
+                    // Find an output which contains type=service
+                    const serviceOutput = outputs.find(output => output.type === "service");
+                    // Assert serviceOutput
+                    if (!serviceOutput) {
+                        console.error("Service output not found:", outputs);
+                        throw new Error("Something went wrong while registering the service.");
+                    }
+                    // Create the annotator URL
+                    const annotationSid = serviceOutput.attrs.id;
+                    const configStr = `{"server_url": "${serverUrl}", "annotation_service_id": "${annotationSid}", "token": "${token}"}`;
+                    const encodedConfig = encodeURIComponent(configStr);
+                    const annotatorUrl = `https://imjoy.io/lite?plugin=${pluginUrl}&config=${encodedConfig}`;
+                    console.log("Annotation URL:\n----------\n", annotatorUrl);
+                    setAnnotationURL(annotatorUrl);
+                    // Run the event loop
+                    await runCode(`import asyncio; loop = asyncio.get_event_loop(); loop.run_forever()`);
+                }
+                catch (error) {
+                    console.error("Error registering service:", error);
+                    throw error;
+                }
+                finally {
+                    setIsRunning(false);
                 }
             };
 
@@ -313,10 +326,10 @@
                         user={user}
                         activeTab={activeTab}
                         onTabClick={setActiveTab}
-                        annotationURL={annotationURL} // Just for testing, remove later on
+                        hyphaVersion={hyphaVersion}
                     />
                     <div className="flex-1 p-4">
-                        <h2 className="text-2xl font-bold mb-4" style={{ height: '2rem', overflow: 'hidden' }}>
+                        <h2 className="text-2xl font-bold mb-4" style={{ height: "2rem", overflow: "hidden" }}>
                             Crowd-sourcing Annotation Tool
                         </h2>
                         {isRunning && (
@@ -326,7 +339,7 @@
                         )}
                         {activeTab === "Local Deployment" && (
                             <>
-                                <div className="text-base text-gray-700 mb-4" style={{ height: '5rem', overflowY: 'auto' }}>
+                                <div className="text-base text-gray-700 mb-4" style={{ height: "5rem", overflowY: "auto" }}>
                                     <p>
                                         First, <strong>mount a local folder</strong> to store your images. Your data stays in the browser, ensuring you keep full control. Next, <strong>deploy the data service</strong> from your browser, which will create an "annotations" folder for saving annotation masks. Finally, <strong>share the annotator URL</strong>.
                                     </p>
@@ -368,7 +381,7 @@
                                 <div className="flex space-x-4">
                                     {imageFolderHandle && (
                                         <div className="bg-blue w-1/2 p-4 rounded-md overflow-auto"
-                                            style={{ maxHeight: 'calc(100vh - 226px)', width: '50%' }}>
+                                            style={{ maxHeight: "calc(100vh - 226px)", width: "50%" }}>
                                             <div className="flex justify-between items-center mb-2">
                                                 <h2 className="text-xl font-semibold">Number of Images: ({imageList.length})</h2>
                                                 <button onClick={() => updateFileList(imageFolderHandle, setImageList, setIsLoadingImages)}>
@@ -395,7 +408,7 @@
 
                                     {annotationsFolderHandle && (
                                         <div className="w-1/2 bg-blue p-4 rounded-md overflow-auto"
-                                            style={{ maxHeight: 'calc(100vh - 226px)', width: '50%' }}>
+                                            style={{ maxHeight: "calc(100vh - 226px)", width: "50%" }}>
                                             <div className="flex justify-between items-center mb-2">
                                                 <h2 className="text-xl font-semibold">Number of Annotations: ({annotationsList.length})</h2>
                                                 <button onClick={() => updateFileList(annotationsFolderHandle, setAnnotationsList, setIsLoadingAnnotations)}>
@@ -445,9 +458,9 @@
             );
         }
 
-        function Sidebar({ onLogin, user, activeTab, onTabClick, annotationURL }) {
+        function Sidebar({ onLogin, user, activeTab, onTabClick, hyphaVersion }) {
             return (
-                <div className="bg-blue w-64 text-white p-4 relative">
+                <div className="bg-blue w-64 text-white p-4 relative h-full">
                     <h1 className="text-xl font-semibold mb-4 text-center">Navigation</h1>
 
                     <div className="flex justify-center mb-4">
@@ -488,21 +501,16 @@
                         </li>
                     </ul>
 
-                    {annotationURL && (
-                        // Just for testing, remove later on
-                        <>
-                            <div className="separator"></div>
-                            <span className="text-white py-2 rounded-md">
-                                Annotation URL: {annotationURL}
-                            </span>
-                        </>
+                    {hyphaVersion && (
+                        <div className="absolute bottom-4 left-4 text-sm italic">
+                            Hypha Version: {hyphaVersion}
+                        </div>
                     )}
-
                 </div>
             );
         }
 
-        ReactDOM.render(<App />, document.getElementById('app'));
+        ReactDOM.render(<App />, document.getElementById("app"));
     </script>
 </body>
 
