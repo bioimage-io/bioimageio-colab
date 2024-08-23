@@ -33,7 +33,7 @@ def save_annotation(annotations_folder: str, image_name: str, features, image_sh
     n_image_masks = len(
         [f for f in os.listdir(annotations_folder) if f.startswith(image_name)]
     )
-    mask_name = os.pth.join(
+    mask_name = os.path.join(
         annotations_folder, f"{image_name}_mask_{n_image_masks + 1}.tif"
     )
     imwrite(mask_name, mask)

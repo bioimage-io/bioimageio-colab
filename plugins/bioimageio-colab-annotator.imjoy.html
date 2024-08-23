@@ -26,7 +26,6 @@ class BioImageIOColabAnnotator {
         this.image = null; // Current image
         this.mask = null; // Current mask
         this.filename = null; // Filename of the current image
-        this.newname = null; // New name for the annotation file
         this.imageLayer = null; // Layer displaying the image
         this.annotationLayer = null; // Layer displaying the annotations
         this.edgeColor = "magenta"; // Default edge color for annotations
@@ -89,7 +88,7 @@ class BioImageIOColabAnnotator {
             }
 
             // Fetch a random image from the service
-            [this.image, this.filename, this.newname] = await dataProvider.get_random_image();
+            [this.image, this.filename] = await dataProvider.get_random_image();
             this.imageLayer = await viewer.view_image(this.image, {name: "image"});
 
             // Reset the predictorId for the new image
@@ -158,7 +157,7 @@ class BioImageIOColabAnnotator {
             if (!this.annotationLayer) return;
             const annotation = await this.annotationLayer.get_features();
             if (annotation.features.length > 0) {
-                await dataProvider.save_annotation(this.filename, this.newname, annotation, [this.image._rshape[0], this.image._rshape[1]]);
+                await dataProvider.save_annotation(this.filename, annotation, [this.image._rshape[0], this.image._rshape[1]]);
                 await api.showMessage(`Annotation Saved to ${this.filename}`);
             } else {
                 await api.showMessage("Skip saving annotation");
