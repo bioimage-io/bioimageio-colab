@@ -304,6 +304,7 @@
                     }
                     // Create the annotator URL
                     const annotationSid = serviceOutput.attrs.id;
+                    console.log("Annotation Service ID:", annotationSid);
                     const configStr = `{"server_url": "${serverUrl}", "annotation_service_id": "${annotationSid}", "token": "${token}"}`;
                     const encodedConfig = encodeURIComponent(configStr);
                     const annotatorUrl = `https://imjoy.io/lite?plugin=${pluginUrl}&config=${encodedConfig}`;
