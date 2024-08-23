@@ -14,7 +14,7 @@
   "env": "",
   "permissions": [],
   "requirements": [
-    "https://cdn.jsdelivr.net/npm/imjoy-rpc@0.5.6/dist/hypha-rpc-websocket.min.js"
+    "https://cdn.jsdelivr.net/npm/hypha-rpc@latest/dist/hypha-rpc-websocket.min.js"
   ],
   "dependencies": []
 }
@@ -59,8 +59,7 @@ class BioImageIOColabAnnotator {
         });
 
         // Get the user ID
-        const connectionInfo = await server.getConnectionInfo();
-        const userID = connectionInfo.user_info.id;
+        const userID = server.config.user.id;
 
         // Get the bioimageio-colab service from the server
         let biocolab;
