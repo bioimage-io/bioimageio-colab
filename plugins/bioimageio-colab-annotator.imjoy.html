@@ -46,7 +46,7 @@ class BioImageIOColabAnnotator {
         
         // Create and display the viewer window
         const viewer = await api.createWindow({src: "https://kaibu.org/#/app", fullscreen: true});
-        await api.showMessage(`Connecting to server ${serverUrl}....`);
+        await api.showMessage(`Connecting to server ${serverUrl}...`);
         // Login before connecting and then use userid
         // TODO: Add login functionality
 
@@ -158,9 +158,9 @@ class BioImageIOColabAnnotator {
             const annotation = await this.annotationLayer.get_features();
             if (annotation.features.length > 0) {
                 await dataProvider.save_annotation(this.filename, annotation, [this.image._rshape[0], this.image._rshape[1]]);
-                await api.showMessage("Annotation saved");
+                await api.showMessage("Annotation saved.");
             } else {
-                await api.showMessage("Skip saving annotation");
+                await api.showMessage("Skip saving annotation.");
             }
         };
 
