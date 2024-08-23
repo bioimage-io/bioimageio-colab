@@ -114,7 +114,7 @@
 
         const serverUrl = "wss://hypha.aicell.io/ws";
         const serviceFile = "data-providing-service.py";
-        const pluginUrl = "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/plugins/bioimageio-colab-annotator.imjoy.html";
+        const pluginUrl = "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/web-ui/plugins/bioimageio-colab-annotator.imjoy.html";  // Update to main branch
         let workerPromise;
 
         function App() {
@@ -144,6 +144,11 @@
                         reject(error);
                     });
                 });
+                // Get login token from localStorage
+                const savedToken = useSavedToken();
+                if (savedToken) {
+                    handleLogin();
+                }
                 // Get image folder handle from IndexedDB
                 window.getFromDB("imageFolderDirHandle").then((dirHandle) => {
                     if (dirHandle) setImageFolderHandle(dirHandle); // Set image folder handle
@@ -169,20 +174,23 @@
                 setPyodideOutput([stdout, stderr].filter(Boolean));
             };
 
+            const useSavedToken = () => {
+                const token = localStorage.getItem("token");
+                if (token) {
+                    const tokenExpiry = localStorage.getItem("tokenExpiry");
+                    if (tokenExpiry && new Date(tokenExpiry) > new Date()) {
+                        return token;
+                    }
+                }
+                return null;
+            }
+
             const loginCallback = (context) => {
                 window.open(context.login_url);
             }
 
             const login = async () => {
-                let token = localStorage.getItem("token");
-                if (token) {
-                    const tokenExpiry = localStorage.getItem("tokenExpiry");
-                    if (tokenExpiry && new Date(tokenExpiry) > new Date()) {
-                        console.log("Using saved token:\n----------\n", token);
-                        return token;
-                    }
-                }
-                token = await hyphaWebsocketClient.login({
+                const token = await hyphaWebsocketClient.login({
                     "server_url": serverUrl,
                     "login_callback": loginCallback,
                 });
@@ -192,7 +200,13 @@
             }
 
             const handleLogin = async () => {
-                const token = await login();
+                let token
+                token = useSavedToken();
+                if (token) {
+                    console.log("Using saved token.");
+                } else {
+                    token = await login();
+                }
                 try {
                     const server = await hyphaWebsocketClient.connectToServer({
                         "server_url": serverUrl,
