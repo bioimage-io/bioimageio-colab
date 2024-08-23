@@ -158,7 +158,7 @@ class BioImageIOColabAnnotator {
             const annotation = await this.annotationLayer.get_features();
             if (annotation.features.length > 0) {
                 await dataProvider.save_annotation(this.filename, annotation, [this.image._rshape[0], this.image._rshape[1]]);
-                await api.showMessage(`Annotation Saved to ${this.filename}`);
+                await api.showMessage("Annotation saved");
             } else {
                 await api.showMessage("Skip saving annotation");
             }
