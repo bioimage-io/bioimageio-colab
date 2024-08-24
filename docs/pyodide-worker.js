@@ -259,43 +259,53 @@ async def run(source, io_context):
 const mountedFs = {}
 
 self.onmessage = async (event) => {
-    if(event.data.source){
-        try{
-            const { source, io_context } = event.data
-            self.pyodide.globals.set("source", source)
-            self.pyodide.globals.set("io_context", io_context && self.pyodide.toPy(io_context))
-            outputs = []
+    if (event.data.source) {
+        try {
+            const { source, io_context } = event.data;
+            self.pyodide.globals.set("source", source);
+            self.pyodide.globals.set("io_context", io_context && self.pyodide.toPy(io_context));
+            outputs = [];
             // see https://github.com/pyodide/pyodide/blob/b177dba277350751f1890279f5d1a9096a87ed13/src/js/api.ts#L546
-            // sync native ==> browser
-            await new Promise((resolve, _) => self.pyodide.FS.syncfs(true, resolve));
-            await self.pyodide.runPythonAsync("await run(source, io_context)")
-            // sync browser ==> native
-            await new Promise((resolve, _) => self.pyodide.FS.syncfs(false, resolve)),
-            console.log("Execution done", outputs)
-            self.postMessage({ executionDone: true, outputs })
-            outputs = []
-        }
-        catch(e){
-            console.error("Execution Error", e)
-            self.postMessage({ executionError: e.message })
-        }
-    }
-    if(event.data.mount){
-        try{
-            const { mountPoint, dirHandle } = event.data.mount
-            if(mountedFs[mountPoint]){
-                console.log("Unmounting native FS:", mountPoint)
-                await self.pyodide.FS.unmount(mountPoint)
-                delete mountedFs[mountPoint]
-            }
-            const nativefs = await self.pyodide.mountNativeFS(mountPoint, dirHandle)
-            mountedFs[mountPoint] = nativefs
-            console.log("Native FS mounted:", mountPoint, nativefs)
-            self.postMessage({ mounted: mountPoint })
-        }
-        catch(e){
-            self.postMessage({ mountError: e.message })
-        }
-    }
+            await new Promise((resolve, _) => self.pyodide.FS.syncfs(true, resolve));  // sync native ==> browser
+            await self.pyodide.runPythonAsync("await run(source, io_context)");
+            await new Promise((resolve, _) => self.pyodide.FS.syncfs(false, resolve));  // sync browser ==> native
 
-}
+            console.log("Execution done", outputs);
+            self.postMessage({ executionDone: true, outputs });
+            outputs = [];
+        } catch (e) {
+            console.error("Execution Error", e);
+            self.postMessage({ executionError: e.message });
+        }
+    }
+    if (event.data.mount) {
+        try {
+            const { mountPoint, dirHandle } = event.data.mount;
+            if (mountedFs[mountPoint]) {
+                console.log("Unmounting native FS:", mountPoint);
+                await self.pyodide.FS.unmount(mountPoint);
+                delete mountedFs[mountPoint];
+            }
+            const nativefs = await self.pyodide.mountNativeFS(mountPoint, dirHandle);
+            mountedFs[mountPoint] = nativefs;
+            console.log("Native FS mounted:", mountPoint, nativefs);
+            self.postMessage({ mounted: mountPoint });
+        } catch (e) {
+            self.postMessage({ mountError: e.message });
+        }
+    }
+    if (event.data.sync) {
+        try {
+            const direction = event.data.sync;
+            if (direction === "native-to-browser") {
+                await new Promise((resolve, _) => self.pyodide.FS.syncfs(true, resolve));  // sync native ==> browser
+            } else if (direction === "browser-to-native") {
+                await new Promise((resolve, _) => self.pyodide.FS.syncfs(false, resolve));  // sync browser ==> native
+            }
+            self.postMessage({ synced: true });
+        } catch (e) {
+            console.error("Error syncing file system:", e);
+            self.postMessage({ syncError: e.message });
+        }
+    }
+};

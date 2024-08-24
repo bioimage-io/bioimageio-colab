@@ -8,6 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/hypha-rpc@latest/dist/hypha-rpc-websocket.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/17.0.2/umd/react.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/17.0.2/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -225,8 +226,17 @@
                 }
             };
 
-            const updateFileList = async (dirHandle, setFileList, setLoading) => {
+            const updateFileList = async (dirHandle, setFileList, setLoading, direction) => {
                 setLoading(true);
+                if (direction) {
+                    try {
+                        const pyodideWorker = await workerPromise;
+                        await pyodideWorker.syncFs(direction);
+                    } catch (error) {
+                        console.error("Error syncing file system:", error);
+                        throw error;
+                    }
+                }
                 try {
                     const files = [];
                     for await (const entry of dirHandle.values()) {
@@ -310,6 +320,8 @@
                     const annotatorUrl = `https://imjoy.io/lite?plugin=${pluginUrl}&config=${encodedConfig}`;
                     console.log("Annotation URL:\n----------\n", annotatorUrl);
                     setAnnotationURL(annotatorUrl);
+                    // Ensure that the same image files are displayed that were mounted to pyodide (sync native ==> browser is called in runCode)
+                    updateFileList(imageFolderHandle, setImageList, setIsLoadingImages)
                     // Run the event loop
                     await runCode(`import asyncio; loop = asyncio.get_event_loop(); loop.run_forever()`);
                 }
@@ -412,7 +424,7 @@
                                             style={{ maxHeight: "calc(100vh - 226px)", width: "50%" }}>
                                             <div className="flex justify-between items-center mb-2">
                                                 <h2 className="text-xl font-semibold">Number of Images: ({imageList.length})</h2>
-                                                <button onClick={() => updateFileList(imageFolderHandle, setImageList, setIsLoadingImages)}>
+                                                <button onClick={() => updateFileList(imageFolderHandle, setImageList, setIsLoadingImages, annotationsFolderHandle ? "native-to-browser" : null )}>
                                                     <i className="fas fa-sync-alt text-white"></i>
                                                 </button>
                                             </div>
@@ -439,7 +451,7 @@
                                             style={{ maxHeight: "calc(100vh - 226px)", width: "50%" }}>
                                             <div className="flex justify-between items-center mb-2">
                                                 <h2 className="text-xl font-semibold">Number of Annotations: ({annotationsList.length})</h2>
-                                                <button onClick={() => updateFileList(annotationsFolderHandle, setAnnotationsList, setIsLoadingAnnotations)}>
+                                                <button onClick={() => updateFileList(annotationsFolderHandle, setAnnotationsList, setIsLoadingAnnotations, "browser-to-native")}>
                                                     <i className="fas fa-sync-alt text-white"></i>
                                                 </button>
                                             </div>

@@ -62,6 +62,9 @@ class PyodideWorkerManager {
       async mount(mountPoint, dirHandle) {
         return await self.mountNativeFs(id, mountPoint, dirHandle)
       },
+      async syncFs(direction) {
+        return await self.syncFs(id, direction);
+      },
       async render(container) {
         self.render(id, container)
       },
@@ -135,6 +138,26 @@ class PyodideWorkerManager {
     })
   }
 
+  async syncFs(workerId, direction) {
+    if (!workerId) {
+        throw new Error("No worker ID provided and no current worker available.");
+    }
+    const worker = await this.getWorker(workerId);
+    return new Promise((resolve, reject) => {
+        const handler = e => {
+            if (e.data.synced) {
+                worker.removeEventListener("message", handler);
+                resolve(true);
+            } else if (e.data.syncError) {
+                worker.removeEventListener("message", handler);
+                reject(new Error(e.data.syncError));
+            }
+        };
+        worker.addEventListener("message", handler);
+        worker.postMessage({ sync: direction });
+    });
+  }
+  
   addToRecord(workerId, record) {
     if (!this.workerRecords[workerId]) {
       this.workerRecords[workerId] = []
