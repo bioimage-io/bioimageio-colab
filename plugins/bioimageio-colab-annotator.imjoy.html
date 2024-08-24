@@ -42,6 +42,8 @@ class BioImageIOColabAnnotator {
         const config = ctx.config || {};
         const serverUrl = config.server_url || "https://hypha.aicell.io";
         const annotationServiceId = config.annotation_service_id || "ws-user-google-oauth2|113850572436772761139/*:data-provider";  // default for testing plugin
+        const workspace = config.workspace
+        const token = config.token
         const samServiceId = "bioimageio-colab/model-server:interactive-segmentation";
         
         // Create and display the viewer window
@@ -53,12 +55,13 @@ class BioImageIOColabAnnotator {
         // Connect to the Hypha server
         const server = await hyphaWebsocketClient.connectToServer({
             server_url: serverUrl,
-            token: config.token,
-            workspace: config.workspace,
+            token: token,
+            workspace: workspace,
         });
 
         // Get the user ID
         const userID = server.config.user.id;
+        await api.showMessage(`Connected to workspace ${server.config.user.scope.current_workspace} as user ${userID}.`);
 
         // Get the bioimageio-colab service from the server
         let dataProvider;
