@@ -71,13 +71,12 @@ class BioImageIOColabAnnotator {
 
         // Get the SAM service from the server
         let sam;
-        // TODO: Uncomment this block after the SAM service is available
-        // try {
-        //     sam = await server.getService(samServiceId);
-        // } catch (e) {
-        //     await api.alert(`Failed to get the bioimageio-colab SAM service (id=${samServiceId}). (Error: ${e})`);
-        //     return;
-        // }
+        try {
+            sam = await server.getService(samServiceId);
+        } catch (e) {
+            sam = null;
+            await api.showMessage(`Failed to get the bioimageio-colab SAM service (id=${samServiceId}). (Error: ${e})`);
+        }
 
         // Function to get a new image and set up the viewer
         const getImage = async () => {
@@ -113,7 +112,7 @@ class BioImageIOColabAnnotator {
 
                             // Compute embeddings if not already computed for the image
                             if (!this.embeddingIsCalculated) {
-                                api.showMessage("Computing embeddings for the image...");
+                                await api.showMessage("Computing embeddings for the image...");
                                 try {
                                     await sam.compute_embedding(userID, this.modelName, this.image);
                                 } catch (e) {
@@ -124,7 +123,7 @@ class BioImageIOColabAnnotator {
                             }
 
                             // Perform segmentation
-                            api.showMessage("Segmenting...");
+                            await api.showMessage("Segmenting...");
                             const features = await sam.segment(userID, pointCoords, pointLabels);
 
                             // Add the segmented features as polygons to the annotation layer
