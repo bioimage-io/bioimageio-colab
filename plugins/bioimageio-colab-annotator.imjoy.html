@@ -41,10 +41,14 @@ class BioImageIOColabAnnotator {
         // Extract configuration settings
         const config = ctx.config || {};
         const serverUrl = config.server_url || "https://hypha.aicell.io";
-        const annotationServiceId = config.annotation_service_id || "ws-user-google-oauth2|113850572436772761139/*:data-provider";  // default for testing plugin
+        const annotationServiceId = config.annotation_service_id;  // default for testing plugin
+        if(!annotationServiceId){
+            await api.alert("Please provide the annotation service ID in the configuration.");
+            return;
+        }
         const workspace = config.workspace
         const token = config.token
-        const samServiceId = "bioimageio-colab/model-server:interactive-segmentation";
+        const samServiceId = "bioimageio-colab/interactive-segmentation";
         
         // Create and display the viewer window
         const viewer = await api.createWindow({src: "https://kaibu.org/#/app", fullscreen: true});
@@ -96,7 +100,7 @@ class BioImageIOColabAnnotator {
             // Reset the predictorId for the new image
             if (sam) {
                 this.embeddingIsCalculated = false;
-                await sam.reset_embedding(userID);
+                await sam.reset_embedding();
             }
 
             // Add the annotation functionality to the interface
@@ -117,7 +121,7 @@ class BioImageIOColabAnnotator {
                             if (!this.embeddingIsCalculated) {
                                 await api.showMessage("Computing embeddings for the image...");
                                 try {
-                                    await sam.compute_embedding(userID, this.modelName, this.image);
+                                    await sam.compute_embedding(this.modelName, this.image);
                                 } catch (e) {
                                     await api.showMessage(`Failed to compute embeddings for the image. (Error: ${e})`);
                                     return;
@@ -127,7 +131,7 @@ class BioImageIOColabAnnotator {
 
                             // Perform segmentation
                             await api.showMessage("Segmenting...");
-                            const features = await sam.segment(userID, pointCoords, pointLabels);
+                            const features = await sam.segment(pointCoords, pointLabels);
 
                             // Add the segmented features as polygons to the annotation layer
                             for (let coords of features) {
