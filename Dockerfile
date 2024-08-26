@@ -30,7 +30,7 @@ COPY ./bioimageio_colab/register_sam_service.py /app/register_sam_service.py
 RUN chown -R bioimageio_colab:bioimageio_colab /app/
 
 # Fetch the Hypha server version and reinstall or upgrade hypha-rpc to the matching version
-RUN HYPHA_VERSION=$(curl -s https://hypha.aicell.io/config.json | jq -r '.hypha_version') && \
+RUN HYPHA_VERSION=$(curl -s https://hypha.aicell.io/assets/config.json | jq -r '.hypha_version') && \
     pip install --upgrade "hypha-rpc<=$HYPHA_VERSION"
 
 # Switch to the non-root user
