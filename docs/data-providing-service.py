@@ -1,7 +1,8 @@
 import os
 import json
-from functools import partial
 from typing import Tuple
+import time
+from functools import partial
 
 import numpy as np
 from hypha_rpc import connect_to_server
@@ -55,11 +56,12 @@ def upload_image_to_s3():
     """
     raise NotImplementedError
 
-
 async def register_service(
     server_url: str,
     token: str,
     supported_file_types_json: str,
+    name: str,
+    description: str,
 ):
     # Define path to images and annotations
     images_path = "/mnt"
@@ -78,8 +80,10 @@ async def register_service(
     # Register the service
     svc = await server.register_service(
         {
-            "name": "Collaborative Annotation",
-            "id": "data-provider",
+            "name": name,
+            "description": description,
+            "id": "data-provider-" + str(int(time.time()*100)),
+            "type": "annotation-data-provider",
             "config": {
                 "visibility": "public",  # TODO: make protected
                 "run_in_executor": True,
@@ -95,3 +99,4 @@ async def register_service(
             "save_annotation": partial(save_annotation, annotations_path),
         }
     )
+    print(f"Service registered with ID: {svc['id']}")
