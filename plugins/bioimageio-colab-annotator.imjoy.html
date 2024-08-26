@@ -14,7 +14,7 @@
   "env": "",
   "permissions": [],
   "requirements": [
-    "https://cdn.jsdelivr.net/npm/imjoy-rpc@0.5.6/dist/hypha-rpc-websocket.min.js"
+    "https://cdn.jsdelivr.net/npm/hypha-rpc@latest/dist/hypha-rpc-websocket.min.js"
   ],
   "dependencies": []
 }
@@ -26,7 +26,6 @@ class BioImageIOColabAnnotator {
         this.image = null; // Current image
         this.mask = null; // Current mask
         this.filename = null; // Filename of the current image
-        this.newname = null; // New name for the annotation file
         this.imageLayer = null; // Layer displaying the image
         this.annotationLayer = null; // Layer displaying the annotations
         this.edgeColor = "magenta"; // Default edge color for annotations
@@ -42,42 +41,44 @@ class BioImageIOColabAnnotator {
         // Extract configuration settings
         const config = ctx.config || {};
         const serverUrl = config.server_url || "https://hypha.aicell.io";
-        const annotationServiceId = config.annotation_service_id || "bioimageio-colab-annotation";  // default for testing plugin
-        const modelServiceId = "bioimageio-colab/model-server:interactive-segmentation"
+        const annotationServiceId = config.annotation_service_id || "ws-user-google-oauth2|113850572436772761139/*:data-provider";  // default for testing plugin
+        const workspace = config.workspace
+        const token = config.token
+        const samServiceId = "bioimageio-colab/model-server:interactive-segmentation";
         
         // Create and display the viewer window
         const viewer = await api.createWindow({src: "https://kaibu.org/#/app", fullscreen: true});
-        await api.showMessage(`Connecting to server ${serverUrl}....`);
+        await api.showMessage(`Connecting to server ${serverUrl}...`);
         // Login before connecting and then use userid
         // TODO: Add login functionality
 
         // Connect to the Hypha server
         const server = await hyphaWebsocketClient.connectToServer({
             server_url: serverUrl,
-            token: config.token,
-            workspace: config.workspace,
+            token: token,
+            workspace: workspace,
         });
 
         // Get the user ID
-        const connectionInfo = await server.getConnectionInfo();
-        const userID = connectionInfo.user_info.id;
+        const userID = server.config.user.id;
+        await api.showMessage(`Connected to workspace ${server.config.user.scope.current_workspace} as user ${userID}.`);
 
         // Get the bioimageio-colab service from the server
-        let biocolab;
+        let dataProvider;
         try {
-            biocolab = await server.getService(annotationServiceId);
+            dataProvider = await server.getService(annotationServiceId);
         } catch (e) {
             await api.alert(`Failed to get the bioimageio-colab annotation service (id=${annotationServiceId}). (Error: ${e})`);
             return;
         }
 
-        // Get the model service from the server
-        let model;
+        // Get the SAM service from the server
+        let sam;
         try {
-            model = await server.getService(modelServiceId);
+            sam = await server.getService(samServiceId);
         } catch (e) {
-            await api.alert(`Failed to get the bioimageio-colab model service (id=${modelServiceId}). (Error: ${e})`);
-            return;
+            sam = null;
+            await api.showMessage(`Failed to get the bioimageio-colab SAM service (id=${samServiceId}). (Error: ${e})`);
         }
 
         // Function to get a new image and set up the viewer
@@ -89,12 +90,14 @@ class BioImageIOColabAnnotator {
             }
 
             // Fetch a random image from the service
-            [this.image, this.filename, this.newname] = await biocolab.get_random_image();
+            [this.image, this.filename] = await dataProvider.get_random_image();
             this.imageLayer = await viewer.view_image(this.image, {name: "image"});
 
             // Reset the predictorId for the new image
-            this.embeddingIsCalculated = false;
-            await model.reset_embedding(userID);
+            if (sam) {
+                this.embeddingIsCalculated = false;
+                await sam.reset_embedding(userID);
+            }
 
             // Add the annotation functionality to the interface
             this.annotationLayer = await viewer.add_shapes([], {
@@ -105,42 +108,46 @@ class BioImageIOColabAnnotator {
                 // Callback for adding a new feature (annotation point)
                 add_feature_callback: async (shape) => {
                     if (shape.geometry.type === "Point") {
-                        // The point coordinates need to be reversed to match the coordinate convention of SAM
-                        const pointCoords = [shape.geometry.coordinates.reverse()];
-                        const pointLabels = pointCoords.map(() => 1); // All points have a label of 1
+                        if (sam) {
+                            // The point coordinates need to be reversed to match the coordinate convention of SAM
+                            const pointCoords = [shape.geometry.coordinates.reverse()];
+                            const pointLabels = pointCoords.map(() => 1); // All points have a label of 1
 
-                        // Compute embeddings if not already computed for the image
-                        if (!this.embeddingIsCalculated) {
-                            api.showMessage("Computing embeddings for the image...");
-                            try {
-                                await model.compute_embedding(userID, this.modelName, this.image);
-                            } catch (e) {
-                                await api.showMessage(`Failed to compute embeddings for the image. (Error: ${e})`);
-                                return;
+                            // Compute embeddings if not already computed for the image
+                            if (!this.embeddingIsCalculated) {
+                                await api.showMessage("Computing embeddings for the image...");
+                                try {
+                                    await sam.compute_embedding(userID, this.modelName, this.image);
+                                } catch (e) {
+                                    await api.showMessage(`Failed to compute embeddings for the image. (Error: ${e})`);
+                                    return;
+                                }
+                                this.embeddingIsCalculated = true;
                             }
-                            this.embeddingIsCalculated = true;
-                        }
 
-                        // Perform segmentation
-                        api.showMessage("Segmenting...");
-                        const features = await model.segment(userID, pointCoords, pointLabels);
+                            // Perform segmentation
+                            await api.showMessage("Segmenting...");
+                            const features = await sam.segment(userID, pointCoords, pointLabels);
 
-                        // Add the segmented features as polygons to the annotation layer
-                        for (let coords of features) {
-                            const polygon = {
-                                type: "Feature",
-                                coordinates: coords,
-                                geometry: {
-                                    type: "Polygon",
-                                    coordinates: [coords],
-                                },
-                                properties: {
-                                    edge_color: this.edgeColor,
-                                    edge_width: 2,
-                                    size: 7,
-                                },
-                            };
-                            this.annotationLayer.add_feature(polygon);
+                            // Add the segmented features as polygons to the annotation layer
+                            for (let coords of features) {
+                                const polygon = {
+                                    type: "Feature",
+                                    coordinates: coords,
+                                    geometry: {
+                                        type: "Polygon",
+                                        coordinates: [coords],
+                                    },
+                                    properties: {
+                                        edge_color: this.edgeColor,
+                                        edge_width: 2,
+                                        size: 7,
+                                    },
+                                };
+                                this.annotationLayer.add_feature(polygon);
+                            }
+                        } else {
+                            await api.showMessage("Warning: SAM service not available. Please try again later.");
                         }
                     }
                 }
@@ -152,10 +159,10 @@ class BioImageIOColabAnnotator {
             if (!this.annotationLayer) return;
             const annotation = await this.annotationLayer.get_features();
             if (annotation.features.length > 0) {
-                await biocolab.save_annotation(this.filename, this.newname, annotation, [this.image._rshape[0], this.image._rshape[1]]);
-                await api.showMessage(`Annotation Saved to ${this.filename}`);
+                await dataProvider.save_annotation(this.filename, annotation, [this.image._rshape[0], this.image._rshape[1]]);
+                await api.showMessage("Annotation saved.");
             } else {
-                await api.showMessage("Skip saving annotation");
+                await api.showMessage("Skip saving annotation.");
             }
         };
 

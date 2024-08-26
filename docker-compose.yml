@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        SOURCE_LABEL: "https://github.com/bioimage-io/bioimageio-colab"
+        CACHEBUST: ${CACHEBUST}
     image: ghcr.io/bioimage-io/bioimageio-colab:latest
     env_file:
       - .env

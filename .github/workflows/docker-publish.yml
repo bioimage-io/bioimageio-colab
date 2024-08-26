@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - main  # Trigger the workflow on pushes to the main branch
-  pull_request:
-    branches:
-      - main  # Trigger the workflow on pull requests to the main branch
 
 jobs:
   build-and-push:
