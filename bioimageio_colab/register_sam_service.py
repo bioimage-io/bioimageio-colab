@@ -223,7 +223,7 @@ async def register_service(args: dict) -> None:
             # remove the user id from the storage
             # returns True if the user was removed successfully
             "remove_user_id": remove_user_id,  # TODO: add a timeout to remove a user after a certain time
-        }
+        }, {"overwrite": True}
     )
     sid = service_info["id"]
     assert sid == f"{args.workspace_name}/{args.client_id}:{args.service_id}"
