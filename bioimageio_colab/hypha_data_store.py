@@ -21,7 +21,7 @@ class HyphaDataStore:
               "require_context": False
             },
             "get": self.http_get,
-        }, overwrite=True)
+        })
 
     def get_url(self, obj_id: str):
         assert self._svc, "Service not initialized, call `setup()`"
