@@ -11,26 +11,39 @@ BRANCH = "main"
 # Download the register_sam_service.py file
 script_url = os.path.join(BASE_URL, BRANCH, "bioimageio_colab/register_sam_service.py")
 script = requests.get(script_url).text
-
 # Remove everything after the 'async def register_service' function
-define_functions = script.split("async def register_service")[0]
+script = script.split("async def register_service")[0]
 
-# Set dummy variables
-variables = """
-WORKSPACE_TOKEN = "dummy"
-CONTEXT = {"user": {"id": "dummy"}}
-"""
+# Imports
+imports = "\n".join([line for line in script.split("\n") if "import" in line])
+
+
+# Functions
+functions = "def" + "def".join([f for f in script.split("def")[1:]])
+
+functions = "\n".join(["    " + line for line in functions.split("\n")])
 
 # Define the execute function
-run_segmentation_script = """
+run_segmentation_script = imports + """
 def execute(image, point_coordinates, point_labels):
+    MODELS = {
+        "vit_b": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",
+        "vit_b_lm": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/diplomatic-bug/1/files/vit_b.pt",
+        "vit_b_em_organelles": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/noisy-ox/1/files/vit_b.pt",
+    }
+    STORAGE = {}
+    CONTEXT = {"user": {"id": "dummy"}}
+
+    logger = getLogger(__name__)
+    logger.setLevel("INFO")
+
+""" + functions + """
     compute_embedding("vit_b", image, CONTEXT)
     features = segment(point_coordinates, point_labels, CONTEXT)
     return features
 """
 
-script = variables + define_functions + run_segmentation_script
-print(script)
+print(run_segmentation_script)
 
 # Define the pip requirements
 base_requirements_file = os.path.join(BASE_URL, BRANCH, "requirements.txt")
@@ -43,7 +56,7 @@ pip_requirements = [
     requirement
     for requirement in (base_requirements + sam_requirements).split("\n")
     if requirement and not requirement.startswith(("#", "-r"))
-]
+] + ["python-dotenv"]
 print(pip_requirements)
 
 
@@ -70,7 +83,7 @@ async def main(name, script, pip_requirements):
 
     # Run the ResNet function
     result = await svc.run_function(function_id=function_id, args=[image, point_coordinates, point_labels])
-    print("Classification Result:", result)
+    print("Segmentation result:", result)
 
 if __name__ == "__main__":
     asyncio.run(main("microSAM", script, pip_requirements))
