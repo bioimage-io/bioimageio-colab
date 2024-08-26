@@ -540,7 +540,7 @@
                         )}
 
                         {activeTab === "Community Annotations" && (
-                            <CommunityAnnotations serverUrl={serverUrl} token={user.token} />
+                            <CommunityAnnotations serverUrl={serverUrl} />
                         )}
                     </div>
 
@@ -695,12 +695,15 @@
             );
         }
 
-        function CommunityAnnotations({ serverUrl, token }) {
+        function CommunityAnnotations({ serverUrl }) {
+            const [token, setToken] = useState(localStorage.getItem("token"));
             const [annotationServices, setAnnotationServices] = useState([]);
 
             useEffect(() => {
                 const fetchAnnotations = async () => {
                     try {
+                        const token = localStorage.getItem("token");
+                        setToken(token);
                         const server = await hyphaWebsocketClient.connectToServer({
                             "server_url": serverUrl,
                             "token": token,
@@ -714,7 +717,7 @@
                 };
 
                 fetchAnnotations();
-            }, [serverUrl, token]);
+            }, [serverUrl]);
 
             return (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
