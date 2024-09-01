@@ -58,7 +58,7 @@ import traceback
 import wave
 import pyodide_http
 
-python_version = f"{sys.version_info.major}.{sys.version_info.minor}"; print(python_version)
+python_version = f"{sys.version_info.major}.{sys.version_info.minor}"; print("Python Version:", python_version)
 
 pyodide_http.patch_all()  # Patch all libraries
 help_string = f"""

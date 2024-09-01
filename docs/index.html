@@ -112,15 +112,14 @@
         .info-box {
             background-color: var(--color-light);
             border-left: 4px solid var(--color-accent);
-            padding: 1rem;
-            margin-bottom: 1rem;
             border-radius: 0.5rem;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
         }
 
         .info-box-title {
-            font-size: 1.5rem;
+            font-size: 1.2rem;
             font-weight: bold;
-            margin-bottom: 0.5rem;
         }
 
         .info-box-text {
@@ -182,7 +181,6 @@
 
         function App() {
             const [user, setUser] = useState({});
-            const [hyphaVersion, setHyphaVersion] = useState("");
             const [isRunning, setIsRunning] = useState(false);
             const [pyodideOutput, setPyodideOutput] = useState([]);
             const [supportedFileTypes, setSupportedFileTypes] = useState([".tiff", ".tif"]);
@@ -193,15 +191,12 @@
             const [annotationsList, setAnnotationsList] = useState([]);
             const [isLoadingAnnotations, setIsLoadingAnnotations] = useState(false);
             const [annotationURL, setAnnotationURL] = useState("");
-            const [copyFeedback, setCopyFeedback] = useState("Share Annotation URL");
             const [activeTab, setActiveTab] = useState("Local Sessions");
             const [showSessionModal, setShowSessionModal] = useState(false);
             const [showShareModal, setShowShareModal] = useState(false);
-            const [sessionName, setSessionName] = useState(localStorage.getItem("sessionName") || "");
-            const [sessionDescription, setSessionDescription] = useState(localStorage.getItem("sessionDescription") || "");
-            const [isCreatingSession, setIsCreatingSession] = useState(false);
 
             useEffect(() => {
+                // Create a new Pyodide worker
                 workerPromise = new Promise((resolve, reject) => {
                     const workerManager = new PyodideWorkerManager();
                     workerManager.createWorker().then(worker => {
@@ -211,14 +206,62 @@
                         reject(error);
                     });
                 });
-                const savedToken = useSavedToken();
-                if (savedToken) {
-                    handleLogin();
-                }
+                // Get image folder handle from IndexedDB
                 window.getFromDB("imageFolderDirHandle").then((dirHandle) => {
                     if (dirHandle) setImageFolderHandle(dirHandle);
                 });
             }, []);
+
+            const mountFolder = async () => {
+                try {
+                    const dirHandle = await window.showDirectoryPicker();
+                    setImageFolderHandle(dirHandle);
+                } catch (error) {
+                    console.error("Error accessing folder:", error);
+                    alert("An error occurred while accessing the folder: " + error.message);
+                }
+            };
+
+            const updateFileList = async (dirHandle, setFileList, setLoading, direction) => {
+                setLoading(true);
+                if (direction) {
+                    try {
+                        const pyodideWorker = await workerPromise;
+                        await pyodideWorker.syncFs(direction);
+                    } catch (error) {
+                        console.error("Error syncing file system:", error);
+                        throw error;
+                    }
+                }
+                try {
+                    const files = [];
+                    for await (const entry of dirHandle.values()) {
+                        if (entry.kind === "file") {
+                            const fileType = entry.name.slice(entry.name.lastIndexOf(".")).toLowerCase();
+                            if (supportedFileTypes.includes(fileType)) {
+                                files.push(entry.name);
+                            }
+                        }
+                    }
+                    setFileList(files.sort());  // Sort files alphabetically
+                } catch (error) {
+                    console.error("Error updating file list:", error);
+                    throw error;
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            useEffect(() => {
+                if (imageFolderHandle) {
+                    window.saveToDB("imageFolderDirHandle", imageFolderHandle);
+                    updateFileList(imageFolderHandle, setImageList, setIsLoadingImages);
+                    console.log("Mounted folder:", imageFolderHandle.name);
+                    setAnnotationsFolderHandle(null);
+                    setAnnotationsList([]);
+                    setAnnotationURL("");
+                }
+            }, [imageFolderHandle]);
 
             const runCode = async (code) => {
                 const pyodideWorker = await workerPromise;
@@ -238,6 +281,84 @@
                 const stderr = result.filter(r => r.type === "stderr").map(r => r.content).join("");
                 setPyodideOutput([stdout, stderr].filter(Boolean));
             };
+
+            return (
+                <div className="flex h-screen">
+                    <Sidebar
+                        user={user}
+                        setUser={setUser}
+                        activeTab={activeTab}
+                        setActiveTab={setActiveTab}
+                    />
+                    <div className="ml-64 flex-1 p-4">
+                        <h2 className="text-2xl font-bold mb-4" style={{ height: "2rem", overflow: "hidden" }}>
+                            BioImage.IO Colab: Annotate & Collaborate
+                        </h2>
+                        {isRunning && (
+                            <div className="floating-spinner">
+                                <div className="spinner-border"></div>
+                            </div>
+                        )}
+                        {activeTab === "Local Sessions" && (
+                            <LocalSession
+                                user={user}
+                                mountFolder={mountFolder}
+                                updateFileList={updateFileList}
+                                imageFolderHandle={imageFolderHandle}
+                                imageList={imageList}
+                                setImageList={setImageList}
+                                isLoadingImages={isLoadingImages}
+                                setIsLoadingImages={setIsLoadingImages}
+                                annotationsFolderHandle={annotationsFolderHandle}
+                                annotationsList={annotationsList}
+                                setAnnotationsList={setAnnotationsList}
+                                isLoadingAnnotations={isLoadingAnnotations}
+                                setIsLoadingAnnotations={setIsLoadingAnnotations}
+                                annotationURL={annotationURL}
+                                setShowSessionModal={setShowSessionModal}
+                                setShowShareModal={setShowShareModal}
+                            />
+                        )}
+
+                        {activeTab === "Remote Deployment" && (
+                            <RemoteDeployment />
+                        )}
+
+                        {activeTab === "Community Annotations" && (
+                            <CommunityAnnotations />
+                        )}
+                    </div>
+
+                    {showSessionModal && (
+                        <SessionModal
+                            setShowSessionModal={setShowSessionModal}
+                            updateFileList={updateFileList}
+                            imageFolderHandle={imageFolderHandle}
+                            setImageList={setImageList}
+                            setIsLoadingImages={setIsLoadingImages}
+                            setAnnotationsFolderHandle={setAnnotationsFolderHandle}
+                            setAnnotationsList={setAnnotationsList}
+                            setIsLoadingAnnotations={setIsLoadingAnnotations}
+                            setIsRunning={setIsRunning}
+                            runCode={runCode}
+                            supportedFileTypes={supportedFileTypes}
+                            setAnnotationURL={setAnnotationURL}
+                        />
+                    )}
+
+                    {showShareModal && (
+                        <ShareModal
+                            annotationURL={annotationURL}
+                            setShowShareModal={setShowShareModal}
+                        />
+                    )}
+                </div>
+            );
+        }
+
+        function Sidebar({ user, setUser, activeTab, setActiveTab }) {
+            const [isLoggingIn, setIsLoggingIn] = useState(false);
+            const [hyphaVersion, setHyphaVersion] = useState("");
 
             const useSavedToken = () => {
                 const token = localStorage.getItem("token");
@@ -265,6 +386,7 @@
             }
 
             const handleLogin = async () => {
+                setIsLoggingIn(true);
                 let token
                 token = useSavedToken();
                 if (token) {
@@ -282,364 +404,28 @@
                     console.log("Logged in as:", server.config.user);
                 } catch (error) {
                     console.error("Error connecting to server:", error);
+                    // Clear token and tokenExpiry
                     localStorage.setItem("token", "");
                     localStorage.setItem("tokenExpiry", "");
+                    // Retry login
                     handleLogin();
-                }
-            };
-
-            const updateFileList = async (dirHandle, setFileList, setLoading, direction) => {
-                setLoading(true);
-                if (direction) {
-                    try {
-                        const pyodideWorker = await workerPromise;
-                        await pyodideWorker.syncFs(direction);
-                    } catch (error) {
-                        console.error("Error syncing file system:", error);
-                        throw error;
-                    }
-                }
-                try {
-                    const files = [];
-                    for await (const entry of dirHandle.values()) {
-                        if (entry.kind === "file") {
-                            const fileType = entry.name.slice(entry.name.lastIndexOf(".")).toLowerCase();
-                            if (supportedFileTypes.includes(fileType)) {
-                                files.push(entry.name);
-                            }
-                        }
-                    }
-                    setFileList(files.sort());
-                } catch (error) {
-                    console.error("Error updating file list:", error);
-                    throw error;
                 } finally {
-                    setLoading(false);
-                }
-            };
-
-            const mountFolder = async () => {
-                try {
-                    const dirHandle = await window.showDirectoryPicker();
-                    setImageFolderHandle(dirHandle);
-                } catch (error) {
-                    console.error("Error accessing folder:", error);
-                    throw error;
+                    setIsLoggingIn(false);
                 }
             };
 
             useEffect(() => {
-                if (imageFolderHandle) {
-                    window.saveToDB("imageFolderDirHandle", imageFolderHandle);
-                    updateFileList(imageFolderHandle, setImageList, setIsLoadingImages);
-                    console.log("Mounted folder:", imageFolderHandle.name);
+                const savedToken = useSavedToken();
+                if (savedToken) {
+                    handleLogin();
                 }
-            }, [imageFolderHandle]);
-
-            const createAnnotationSession = async () => {
-                if (!user.email) {
-                    alert("Please login first");
-                    return;
-                }
-                setShowSessionModal(true);
-            };
-
-            const handleCreateSession = async () => {
-                setIsCreatingSession(true);
-                const token = localStorage.getItem("token");
-                localStorage.setItem("sessionName", sessionName);
-                localStorage.setItem("sessionDescription", sessionDescription);
-
-                try {
-                    const annotationsFolder = await imageFolderHandle.getDirectoryHandle("annotations", { create: true });
-                    setAnnotationsFolderHandle(annotationsFolder);
-                    await updateFileList(annotationsFolder, setAnnotationsList, setIsLoadingAnnotations);
-                    console.log("Created annotations folder:", annotationsFolder.name);
-                } catch (error) {
-                    console.error("Error creating annotations folder:", error);
-                    throw error;
-                }
-                try {
-                    setIsRunning(true);
-                    const code = await fetch(`./${serviceFile}`).then(response => response.text());
-                    await runCode(code);
-                    const pyodideWorker = await workerPromise;
-                    await pyodideWorker.mount("/mnt", imageFolderHandle);
-                    const supportedFileTypesJson = JSON.stringify(supportedFileTypes).replace(/"/g, '\\"');
-                    const outputs = await runCode(
-                        `await register_service("${serverUrl}", "${token}", "${supportedFileTypesJson}", "${sessionName}", "${sessionDescription}")`
-                    );
-                    const serviceOutput = outputs.find(output => output.type === "service");
-                    if (!serviceOutput) {
-                        console.error("Service output not found:", outputs);
-                        throw new Error("Something went wrong while registering the service.");
-                    }
-                    const annotationSid = serviceOutput.attrs.id;
-                    console.log("Annotation Service ID:", annotationSid);
-                    const configStr = `{"server_url": "${serverUrl}", "annotation_service_id": "${annotationSid}", "token": "${token}"}`;
-                    const encodedConfig = encodeURIComponent(configStr);
-                    const annotatorUrl = `https://imjoy.io/lite?plugin=${pluginUrl}&config=${encodedConfig}`;
-                    console.log("Annotation URL:\n----------\n", annotatorUrl);
-                    setAnnotationURL(annotatorUrl);
-                    updateFileList(imageFolderHandle, setImageList, setIsLoadingImages)
-                    await runCode(`import asyncio; loop = asyncio.get_event_loop(); loop.run_forever()`);
-                }
-                catch (error) {
-                    console.error("Error registering service:", error);
-                    throw error;
-                }
-                finally {
-                    setIsRunning(false);
-                    setShowSessionModal(false);
-                    setIsCreatingSession(false);
-                }
-            };
-
-            const shareAnnotationURL = async () => {
-                if (!annotationURL) return;
-                setShowShareModal(true);
-            };
-
-            const progressPercentage = annotationsList.length > 0 ? Math.round((annotationsList.length / imageList.length) * 100) : 0;
+            }, []);
 
             return (
-                <div className="flex h-screen">
-                    <Sidebar
-                        onLogin={handleLogin}
-                        user={user}
-                        activeTab={activeTab}
-                        onTabClick={setActiveTab}
-                        hyphaVersion={hyphaVersion}
-                    />
-                    <div className="flex-1 p-4">
-                        <h2 className="text-2xl font-bold mb-4" style={{ height: "2rem", overflow: "hidden" }}>
-                            BioImage.IO Colab: Annotate & Collaborate
-                        </h2>
-                        {isRunning && (
-                            <div className="floating-spinner">
-                                <div className="spinner-border"></div>
-                            </div>
-                        )}
-                        {activeTab === "Local Sessions" && (
-                            <>
-                                <div className="flex items-center mb-4">
-                                    <div className="text-xl font-semibold mr-2">1.</div>
-                                    <button
-                                        className="bg-purple text-white px-4 py-2 rounded-md btn-click-effect"
-                                        onClick={mountFolder}
-                                    >
-                                        <i className="fas fa-folder-open mr-2"></i>
-                                        Mount Local Folder
-                                    </button>
-                                    <span className="mx-2 text-xl">→</span>
-
-                                    <div className="text-xl font-semibold mr-2">2.</div>
-                                    <button
-                                        className={`${imageFolderHandle ? "bg-purple btn-click-effect" : "bg-disabled-button"} text-white px-4 py-2 rounded-md`}
-                                        onClick={createAnnotationSession}
-                                        disabled={!imageFolderHandle}
-                                    >
-                                        <i className="fas fa-pen-alt mr-2"></i>
-                                        Create Annotation Session
-                                    </button>
-                                    <span className="mx-2 text-xl">→</span>
-
-                                    <div className="text-xl font-semibold mr-2">3.</div>
-                                    <button
-                                        id="share-url-button"
-                                        className={`${annotationURL ? "bg-purple btn-click-effect" : "bg-disabled-button"} text-white px-4 py-2 rounded-md`}
-                                        onClick={shareAnnotationURL}
-                                        disabled={!annotationURL}
-                                    >
-                                        <i className="fas fa-share-alt mr-2"></i>
-                                        {copyFeedback}
-                                    </button>
-                                </div>
-
-                                <div className="flex space-x-4">
-                                    {imageFolderHandle && (
-                                        <div className="bg-primary w-1/2 p-4 rounded-md overflow-auto"
-                                            style={{ maxHeight: "calc(100vh - 226px)", width: "50%" }}>
-                                            <div className="flex justify-between items-center mb-2">
-                                                <h2 className="text-xl font-semibold text-white">Pending Images ({imageList.length})</h2>
-                                                <button className="btn-click-effect" onClick={() => updateFileList(imageFolderHandle, setImageList, setIsLoadingImages, annotationsFolderHandle ? "native-to-browser" : null )}>
-                                                    <i className="fas fa-sync-alt text-white"></i>
-                                                </button>
-                                            </div>
-                                            {isLoadingImages ? (
-                                                <div className="flex justify-center items-center h-full">
-                                                    <div className="spinner-border"></div>
-                                                </div>
-                                            ) : (
-                                                <ul>
-                                                    {imageList.length > 0 ? (
-                                                        imageList.map((file, index) => (
-                                                            <li key={index} className="text-white flex items-center"><i className="fas fa-image mr-2"></i>{file}</li>
-                                                        ))
-                                                    ) : (
-                                                        <li className="text-white">No files found.</li>
-                                                    )}
-                                                </ul>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {annotationsFolderHandle && (
-                                        <div className="w-1/2 bg-primary p-4 rounded-md overflow-auto"
-                                            style={{ maxHeight: "calc(100vh - 226px)", width: "50%" }}>
-                                            <div className="flex justify-between items-center mb-2">
-                                                <h2 className="text-xl font-semibold text-white">Annotated Images ({annotationsList.length})</h2>
-                                                <button className="btn-click-effect" onClick={() => updateFileList(annotationsFolderHandle, setAnnotationsList, setIsLoadingAnnotations, "browser-to-native")}>
-                                                    <i className="fas fa-sync-alt text-white"></i>
-                                                </button>
-                                            </div>
-                                            {isLoadingAnnotations ? (
-                                                <div className="flex justify-center items-center h-full">
-                                                    <div className="spinner-border"></div>
-                                                </div>
-                                            ) : (
-                                                <ul>
-                                                    {annotationsList.length > 0 ? (
-                                                        annotationsList.map((file, index) => (
-                                                            <li key={index} className="text-white flex items-center"><i className="fas fa-image mr-2"></i>{file}</li>
-                                                        ))
-                                                    ) : (
-                                                        <li className="text-white">No files found.</li>
-                                                    )}
-                                                </ul>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="progress-bar mt-4 mb-4" style={{ width: `${progressPercentage}%` }}></div>
-                                <div className="text-sm font-semibold text-gray-600 mb-4">
-                                    {`Annotated ${annotationsList.length} out of ${imageList.length} images`}
-                                </div>
-                                <div className="info-box">
-                                    <div className="info-box-title">Getting Started</div>
-                                    <div className="info-box-text">
-                                        <p className="mt-4">
-                                            <strong>BioImage.IO Colab</strong> is an interactive, AI-powered annotation tool designed for collaborative annotation. Whether you're crowd-sourcing annotations or working within a team, this tool offers a streamlined way to manage and complete your image annotations efficiently.
-                                        </p>
-                                        <p>
-                                            <strong>Step 1:</strong> Mount a local folder containing images for annotation. The data stays in your browser, ensuring full control over your files.
-                                        </p>
-                                        <p className="mt-2">
-                                            <strong>Step 2:</strong> Create an annotation session to generate an annotation URL for the Kaibu tool. This URL can be shared with collaborators.
-                                        </p>
-                                        <p className="mt-2">
-                                            <strong>Step 3:</strong> Share the annotation URL, and annotations will be automatically saved in the "annotations" folder within your mounted directory.
-                                        </p>
-                                        <p className="mt-4">
-                                            <strong>Note:</strong> Closing this tab will stop the annotation session. Use the "Remote Deployments" feature (coming soon) to maintain active sessions.
-                                        </p>
-                                        
-                                    </div>
-                                </div>
-                            </>
-                        )}
-
-                        {activeTab === "Community Annotations" && (
-                            <CommunityAnnotations serverUrl={serverUrl} />
-                        )}
-                    </div>
-
-                    {showSessionModal && (
-                        <div className="modal-overlay">
-                            <div className="modal">
-                                <div className="modal-header">Create Annotation Session</div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700">Session Name</label>
-                                    <input
-                                        type="text"
-                                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                                        value={sessionName}
-                                        onChange={(e) => setSessionName(e.target.value)}
-                                    />
-                                </div>
-                                <div className="mt-4">
-                                    <label className="block text-sm font-medium text-gray-700">Description</label>
-                                    <textarea
-                                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                                        rows="4"
-                                        value={sessionDescription}
-                                        onChange={(e) => setSessionDescription(e.target.value)}
-                                    ></textarea>
-                                </div>
-                                <div className="mt-4 flex items-center">
-                                    <span className="mr-2">Public</span>
-                                    <input type="checkbox" checked disabled />
-                                </div>
-                                <div className="modal-footer">
-                                    <button
-                                        className="bg-gray-500 text-white px-4 py-2 rounded-md"
-                                        onClick={() => setShowSessionModal(false)}
-                                        disabled={isCreatingSession}
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        className="bg-secondary text-white px-4 py-2 rounded-md flex items-center"
-                                        onClick={handleCreateSession}
-                                        disabled={isCreatingSession}
-                                    >
-                                        {isCreatingSession && <i className="fas fa-spinner fa-spin mr-2"></i>}
-                                        Create
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {showShareModal && (
-                        <div className="modal-overlay">
-                            <div className="modal">
-                                <div className="modal-header">Share Annotation URL</div>
-                                <div className="modal-footer">
-                                    <button
-                                        className="bg-secondary text-white px-4 py-2 rounded-md"
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(annotationURL);
-                                            setCopyFeedback("Copied!");
-                                            setTimeout(() => setCopyFeedback("Copy URL"), 3000);
-                                        }}
-                                    >
-                                        {copyFeedback}
-                                    </button>
-                                    <a
-                                        href={annotationURL}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="bg-accent text-white px-4 py-2 rounded-md"
-                                    >
-                                        Open URL
-                                    </a>
-                                    <button
-                                        className="bg-gray-500 text-white px-4 py-2 rounded-md"
-                                        onClick={() => setShowShareModal(false)}
-                                    >
-                                        Close
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
-        function Sidebar({ onLogin, user, activeTab, onTabClick, hyphaVersion }) {
-            const [isLoggingIn, setIsLoggingIn] = useState(false);
-
-            const handleLoginClick = async () => {
-                setIsLoggingIn(true);
-                await onLogin();
-                setIsLoggingIn(false);
-            };
-
-            return (
-                <div className="bg-primary w-64 text-white p-4 relative h-full">
-                    <h1 className="text-xl font-semibold mb-4 text-center"><i className="fas fa-project-diagram mr-2"></i>BioImage.IO Colab</h1>
+                <div className="bg-primary w-64 text-white p-4 fixed top-0 left-0 h-full">
+                    <h1 className="text-xl font-semibold mb-4 text-center">
+                        <i className="fas fa-project-diagram mr-2"></i>BioImage.IO Colab
+                    </h1>
 
                     <div className="flex justify-center mb-4">
                         {user.email ? (
@@ -650,7 +436,7 @@
                         ) : (
                             <button
                                 className="bg-secondary text-white px-10 py-2 rounded-md btn-click-effect flex items-center justify-center"
-                                onClick={handleLoginClick}
+                                onClick={handleLogin}
                             >
                                 {isLoggingIn ? (
                                     <i className="fas fa-spinner fa-spin mr-2"></i>
@@ -667,19 +453,19 @@
                     <ul>
                         <li
                             className={`mb-2 p-2 rounded-md cursor-pointer ${activeTab === "Local Sessions" ? "tab-active" : "bg-hover"}`}
-                            onClick={() => onTabClick("Local Sessions")}
+                            onClick={() => setActiveTab("Local Sessions")}
                         >
                             <a href="#" className="text-white"><i className="fas fa-laptop mr-2"></i>Local Sessions</a>
                         </li>
                         <li
                             className={`mb-2 p-2 rounded-md cursor-pointer ${activeTab === "Remote Deployment" ? "tab-active" : "bg-hover"}`}
-                            onClick={() => onTabClick("Remote Deployment")}
+                            onClick={() => setActiveTab("Remote Deployment")}
                         >
                             <a href="#" className="text-white"><i className="fas fa-cloud-upload-alt mr-2"></i>Remote Deployment</a>
                         </li>
                         <li
                             className={`mb-2 p-2 rounded-md cursor-pointer ${activeTab === "Community Annotations" ? "tab-active" : "bg-hover"}`}
-                            onClick={() => onTabClick("Community Annotations")}
+                            onClick={() => setActiveTab("Community Annotations")}
                         >
                             <a href="#" className="text-white"><i className="fas fa-users mr-2"></i>Community Annotations</a>
                         </li>
@@ -695,7 +481,234 @@
             );
         }
 
-        function CommunityAnnotations({ serverUrl }) {
+        function LocalSession({
+            user,
+            mountFolder,
+            updateFileList,
+            imageFolderHandle,
+            imageList,
+            setImageList,
+            isLoadingImages,
+            setIsLoadingImages,
+            annotationsFolderHandle,
+            annotationsList,
+            setAnnotationsList,
+            isLoadingAnnotations,
+            setIsLoadingAnnotations,
+            annotationURL,
+            setShowSessionModal,
+            setShowShareModal,
+        }) {
+            const [isCollapsed, setIsCollapsed] = useState(false);
+
+            const updateImages = async () => {
+                await updateFileList(
+                    imageFolderHandle,
+                    setImageList,
+                    setIsLoadingImages,
+                    annotationsFolderHandle ? "native-to-browser" : null
+                );
+            };
+            const updateAnnotations = async () => {
+                await updateFileList(
+                    annotationsFolderHandle,
+                    setAnnotationsList,
+                    setIsLoadingAnnotations,
+                    "browser-to-native"
+                );
+            };
+
+            const createAnnotationSession = async () => {
+                if (!user.email) {
+                    alert("Please login first");
+                    return;
+                }
+                setShowSessionModal(true);
+            };
+
+            const topHight = isCollapsed ? 258 : 450;
+            const progressPercentage = annotationsList.length > 0 ? Math.round((annotationsList.length / imageList.length) * 100) : 0;
+
+            return (
+                <>
+                    <div className="flex space-x-4">
+                            
+
+                        <div className="info-box">
+                            <div 
+                                className="info-box-title flex justify-between items-center cursor-pointer"
+                                onClick={() => setIsCollapsed(!isCollapsed)}
+                            >
+                                <span className="flex-grow">Getting Started</span>
+                                <i className={`ml-1 fas ${isCollapsed ? 'fa-chevron-down' : 'fa-chevron-up'}`}></i>
+                            </div>
+                            {!isCollapsed && (
+                                <div className="info-box-text">
+                                    <p className="mt-4">
+                                        <strong>BioImage.IO Colab</strong> is an interactive,
+                                        AI-powered annotation tool designed for collaborative
+                                        annotation. Whether you're crowd-sourcing annotations or
+                                        working within a team, this tool offers a streamlined way to
+                                        manage and complete your image annotations efficiently.
+                                    </p>
+                                    <p>
+                                        <strong>Step 1:</strong> Mount a local folder containing
+                                        images for annotation. The data stays in your browser,
+                                        ensuring full control over your files.
+                                    </p>
+                                    <p className="mt-2">
+                                        <strong>Step 2:</strong> Create an annotation session to
+                                        generate an annotation URL for the Kaibu tool. This URL can
+                                        be shared with collaborators.
+                                    </p>
+                                    <p className="mt-2">
+                                        <strong>Step 3:</strong> Share the annotation URL, and
+                                        annotations will be automatically saved in the
+                                        "annotations" folder within your mounted directory.
+                                    </p>
+                                    <p className="mt-4">
+                                        <strong>Note:</strong> Closing this tab will stop the
+                                        annotation session. Use the "Remote Deployments" feature
+                                        (coming soon) to maintain active sessions.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex items-center mb-4">
+                        <div className="text-xl font-semibold mr-2">1.</div>
+                        <button
+                            className="bg-purple text-white px-4 py-2 rounded-md btn-click-effect"
+                            onClick={mountFolder}
+                        >
+                            <i className="fas fa-folder-open mr-2"></i>
+                            Mount Local Folder
+                        </button>
+                        <span className="mx-2 text-xl">→</span>
+
+                        <div className="text-xl font-semibold mr-2">2.</div>
+                        <button
+                            className={`${imageList.length > 0 ? "bg-purple btn-click-effect" : "bg-disabled-button"
+                                } text-white px-4 py-2 rounded-md`}
+                            onClick={createAnnotationSession}
+                            disabled={!imageList.length > 0}
+                        >
+                            <i className="fas fa-pen-alt mr-2"></i>
+                            Create Annotation Session
+                        </button>
+                        <span className="mx-2 text-xl">→</span>
+
+                        <div className="text-xl font-semibold mr-2">3.</div>
+                        <button
+                            id="share-url-button"
+                            className={`${annotationURL ? "bg-purple btn-click-effect" : "bg-disabled-button"
+                                } text-white px-4 py-2 rounded-md`}
+                            onClick={() => setShowShareModal(true)}
+                            disabled={!annotationURL}
+                        >
+                            <i className="fas fa-share-alt mr-2"></i>
+                            Share Annotation URL
+                        </button>
+                    </div>
+
+                    <div className="flex space-x-4">
+                        {imageFolderHandle && (
+                            <div
+                                className="bg-primary w-1/2 p-4 rounded-md overflow-auto"
+                                style={{ maxHeight: `calc(100vh - ${topHight}px)`}}
+                            >
+                                <div className="flex justify-between items-center mb-2">
+                                    <h2 className="text-xl font-semibold text-white">
+                                        Images ({imageList.length})
+                                    </h2>
+                                    <button
+                                        className="btn-click-effect"
+                                        onClick={updateImages}
+                                    >
+                                        <i className="fas fa-sync-alt text-white"></i>
+                                    </button>
+                                </div>
+                                {isLoadingImages ? (
+                                    <div className="flex justify-center items-center h-full">
+                                        <div className="spinner-border"></div>
+                                    </div>
+                                ) : (
+                                    <ul>
+                                        {imageList.length > 0 ? (
+                                            imageList.map((file, index) => (
+                                                <li key={index} className="text-white flex items-center">
+                                                    <i className="fas fa-image mr-2"></i>
+                                                    {file}
+                                                </li>
+                                            ))
+                                        ) : (
+                                            <li className="text-white">No images found.</li>
+                                        )}
+                                    </ul>
+                                )}
+                            </div>
+                        )}
+                        {annotationsFolderHandle && (
+                            <div
+                                className="w-1/2 bg-primary p-4 rounded-md overflow-auto"
+                                style={{ maxHeight: `calc(100vh - ${topHight}px)`}}
+                            >
+                                <div className="flex justify-between items-center mb-2">
+                                    <h2 className="text-xl font-semibold text-white">
+                                        Annotations ({annotationsList.length})
+                                    </h2>
+                                    <button
+                                        className="btn-click-effect"
+                                        onClick={updateAnnotations}
+                                    >
+                                        <i className="fas fa-sync-alt text-white"></i>
+                                    </button>
+                                </div>
+                                {isLoadingAnnotations ? (
+                                    <div className="flex justify-center items-center h-full">
+                                        <div className="spinner-border"></div>
+                                    </div>
+                                ) : (
+                                    <ul>
+                                        {annotationsList.length > 0 ? (
+                                            annotationsList.map((file, index) => (
+                                                <li key={index} className="text-white flex items-center">
+                                                    <i className="fas fa-image mr-2"></i>
+                                                    {file}
+                                                </li>
+                                            ))
+                                        ) : (
+                                            <li className="text-white">No annotations found.</li>
+                                        )}
+                                    </ul>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                    <div
+                        className="progress-bar mt-4 mb-4"
+                        style={{ width: `${progressPercentage}%` }}
+                    ></div>
+                    <div className="text-sm font-semibold text-gray-600 mb-4">
+                        {`Annotated ${annotationsList.length} out of ${imageList.length} images`}
+                    </div>
+                </>
+            );
+        }
+
+        function RemoteDeployment() {
+            return (
+                <div className="flex justify-center items-center h-full">
+                    <div className="text-xl flex items-center">
+                        <i className="fas fa-tools mr-2"></i>
+                        <span className="font-semibold">Remote Deployment</span>&nbsp;is coming soon.
+                    </div>
+                </div>
+            );
+        }
+
+        function CommunityAnnotations() {
             const [token, setToken] = useState(localStorage.getItem("token"));
             const [annotationServices, setAnnotationServices] = useState([]);
 
@@ -745,6 +758,174 @@
                     ) : (
                         <p className="text-center text-gray-500 col-span-4">No annotation sessions available.</p>
                     )}
+                </div>
+            );
+        }
+
+        function SessionModal({
+            setShowSessionModal,
+            updateFileList,
+            imageFolderHandle,
+            setImageList,
+            setIsLoadingImages,
+            setAnnotationsFolderHandle,
+            setAnnotationsList,
+            setIsLoadingAnnotations,
+            setIsRunning,
+            runCode,
+            supportedFileTypes,
+            setAnnotationURL,
+        }) {
+            const [isCreatingSession, setIsCreatingSession] = useState(false);
+            const [sessionName, setSessionName] = useState(localStorage.getItem("sessionName") || "");
+            const [sessionDescription, setSessionDescription] = useState(localStorage.getItem("sessionDescription") || "");
+
+            const handleCreateSession = async () => {
+                setIsCreatingSession(true);
+                const token = localStorage.getItem("token");
+                localStorage.setItem("sessionName", sessionName);
+                localStorage.setItem("sessionDescription", sessionDescription);
+
+                // Create annotations folder
+                try {
+                    const annotationsFolder = await imageFolderHandle.getDirectoryHandle("annotations", { create: true });
+                    setAnnotationsFolderHandle(annotationsFolder);
+                    await updateFileList(annotationsFolder, setAnnotationsList, setIsLoadingAnnotations);
+                    console.log("Created annotations folder:", annotationsFolder.name);
+                } catch (error) {
+                    console.error("Error creating annotations folder:", error);
+                    throw error;
+                }
+
+                // Start annotation session
+                try {
+                    setIsRunning(true);
+                    // Load the service code
+                    const code = await fetch(`./${serviceFile}`).then(response => response.text());
+                    await runCode(code);
+                    // Mount the image folder to the pyodide worker
+                    const pyodideWorker = await workerPromise;
+                    await pyodideWorker.mount("/mnt", imageFolderHandle);
+                    // Register the service
+                    const supportedFileTypesJson = JSON.stringify(supportedFileTypes).replace(/"/g, '\\"');
+                    const outputs = await runCode(
+                        `await register_service("${serverUrl}", "${token}", "${supportedFileTypesJson}", "${sessionName}", "${sessionDescription}")`
+                    );
+                    const serviceOutput = outputs.find(output => output.type === "service");
+                    if (!serviceOutput) {
+                        console.error("Service output not found:", outputs);
+                        throw new Error("Something went wrong while registering the service.");
+                    }
+                    const annotationSid = serviceOutput.attrs.id;
+                    console.log("Annotation Service ID:", annotationSid);
+                    // Create the annotator URL
+                    const configStr = `{"server_url": "${serverUrl}", "annotation_service_id": "${annotationSid}", "token": "${token}"}`;
+                    const encodedConfig = encodeURIComponent(configStr);
+                    const annotatorUrl = `https://imjoy.io/lite?plugin=${pluginUrl}&config=${encodedConfig}`;
+                    console.log("Annotation URL:\n----------\n", annotatorUrl);
+                    setAnnotationURL(annotatorUrl);
+                    // Ensure that the same image files are displayed that were mounted to pyodide (sync native ==> browser is called in runCode)
+                    updateFileList(imageFolderHandle, setImageList, setIsLoadingImages)
+                    // Run the event loop to keep the service running
+                    await runCode(`import asyncio; loop = asyncio.get_event_loop(); loop.run_forever()`);
+                }
+                catch (error) {
+                    console.error("Error registering service:", error);
+                    throw error;
+                }
+                finally {
+                    setIsRunning(false);
+                    setShowSessionModal(false);
+                    setIsCreatingSession(false);
+                }
+            };
+
+            return (
+                <div className="modal-overlay">
+                    <div className="modal">
+                        <div className="modal-header">Create Annotation Session</div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                                Session Name
+                            </label>
+                            <input
+                                type="text"
+                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                value={sessionName}
+                                onChange={(e) => setSessionName(e.target.value)}
+                            />
+                        </div>
+                        <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700">
+                                Description
+                            </label>
+                            <textarea
+                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                rows="4"
+                                value={sessionDescription}
+                                onChange={(e) => setSessionDescription(e.target.value)}
+                            ></textarea>
+                        </div>
+                        <div className="mt-4 flex items-center">
+                            <span className="mr-2">Public</span>
+                            <input type="checkbox" checked disabled />
+                        </div>
+                        <div className="modal-footer">
+                            <button
+                                className="bg-gray-500 text-white px-4 py-2 rounded-md"
+                                onClick={() => setShowSessionModal(false)}
+                                disabled={isCreatingSession}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="bg-secondary text-white px-4 py-2 rounded-md flex items-center"
+                                onClick={handleCreateSession}
+                                disabled={isCreatingSession || !sessionName}
+                            >
+                                {isCreatingSession && <i className="fas fa-spinner fa-spin mr-2"></i>}
+                                Create
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function ShareModal({ annotationURL, setShowShareModal }) {
+            const [copyFeedback, setCopyFeedback] = useState("Copy URL");
+
+            return (
+                <div className="modal-overlay">
+                    <div className="modal">
+                        <div className="modal-header">Share Annotation URL</div>
+                        <div className="modal-footer">
+                            <button
+                                className="bg-secondary text-white px-4 py-2 rounded-md"
+                                onClick={() => {
+                                    navigator.clipboard.writeText(annotationURL);
+                                    setCopyFeedback("URL copied!");
+                                    setTimeout(() => setCopyFeedback("Copy URL"), 3000);
+                                }}
+                            >
+                                {copyFeedback}
+                            </button>
+                            <a
+                                href={annotationURL}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-accent text-white px-4 py-2 rounded-md"
+                            >
+                                Open URL
+                            </a>
+                            <button
+                                className="bg-gray-500 text-white px-4 py-2 rounded-md"
+                                onClick={() => setShowShareModal(false)}
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
                 </div>
             );
         }
