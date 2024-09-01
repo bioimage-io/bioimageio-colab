@@ -191,7 +191,7 @@
             const [annotationsList, setAnnotationsList] = useState([]);
             const [isLoadingAnnotations, setIsLoadingAnnotations] = useState(false);
             const [annotationURL, setAnnotationURL] = useState("");
-            const [activeTab, setActiveTab] = useState("Local Sessions");
+            const [activeTab, setActiveTab] = useState("Local Session");
             const [showSessionModal, setShowSessionModal] = useState(false);
             const [showShareModal, setShowShareModal] = useState(false);
 
@@ -299,7 +299,7 @@
                                 <div className="spinner-border"></div>
                             </div>
                         )}
-                        {activeTab === "Local Sessions" && (
+                        {activeTab === "Local Session" && (
                             <LocalSession
                                 user={user}
                                 mountFolder={mountFolder}
@@ -452,10 +452,10 @@
 
                     <ul>
                         <li
-                            className={`mb-2 p-2 rounded-md cursor-pointer ${activeTab === "Local Sessions" ? "tab-active" : "bg-hover"}`}
-                            onClick={() => setActiveTab("Local Sessions")}
+                            className={`mb-2 p-2 rounded-md cursor-pointer ${activeTab === "Local Session" ? "tab-active" : "bg-hover"}`}
+                            onClick={() => setActiveTab("Local Session")}
                         >
-                            <a href="#" className="text-white"><i className="fas fa-laptop mr-2"></i>Local Sessions</a>
+                            <a href="#" className="text-white"><i className="fas fa-laptop mr-2"></i>Local Session</a>
                         </li>
                         <li
                             className={`mb-2 p-2 rounded-md cursor-pointer ${activeTab === "Remote Deployment" ? "tab-active" : "bg-hover"}`}
