@@ -9,5 +9,5 @@ config:
     notebook_version: 0.1.0
     python_version: '3.11'
     requirements_url: https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/requirements-cellpose.txt
-    sections_to_remove: 0.
+    sections_to_remove: 0.1. 0.2.
     ubuntu_version: '22.04'
