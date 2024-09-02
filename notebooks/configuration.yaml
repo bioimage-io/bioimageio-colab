@@ -1,0 +1,13 @@
+config:
+  dl4miceverywhere:
+    cuda_version: 11.8.0
+    cudnn_version: 8.6.0.163
+    description: This notebook demonstrates how to use image annotations collected from BioImage.IO Colab to train and fine-tune a CellPose model.
+    dl4miceverywhere_version: 2.0.0
+    # docker_hub_image: ...
+    notebook_url: https://github.com/bioimage-io/bioimageio-colab/blob/main/notebooks/BioImageIO_Colab_CellPose_finetuning.ipynb
+    notebook_version: 0.1.0
+    python_version: '3.11'
+    requirements_url: https://github.com/bioimage-io/bioimageio-colab/blob/main/requirements-cellpose.txt
+    sections_to_remove: 0.
+    ubuntu_version: '22.04'
