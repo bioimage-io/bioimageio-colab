@@ -42,12 +42,12 @@ class BioImageIOColabAnnotator {
         const serverUrl = config.server_url || "https://hypha.aicell.io";
         const workspace = config.workspace;
         const token = config.token;
-        const samServiceId = "bioimageio-colab/kubernetes/sam";
-        const annotationServiceId = config.annotation_service_id || `${workspace}/*:data-provider`;  // default for testing plugin
+        const annotationServiceId = config.annotation_service_id;
         if(!annotationServiceId){
             await api.alert("Please provide the annotation service ID in the configuration.");
             return;
         }
+        const samServiceId = "bioimageio-colab/kubernetes:sam";
         
         // Create and display the viewer window
         const viewer = await api.createWindow({src: "https://kaibu.org/#/app", fullscreen: true});
@@ -118,6 +118,7 @@ class BioImageIOColabAnnotator {
                             // The point coordinates need to be reversed to match the coordinate convention of SAM
                             const pointCoords = [shape.geometry.coordinates.reverse()];
                             const pointLabels = pointCoords.map(() => 1); // All points have a label of 1
+                            let features = [];
 
                             // Compute embeddings if not already computed for the image
                             try {
@@ -126,12 +127,7 @@ class BioImageIOColabAnnotator {
                                 } else {
                                     await api.showMessage("Segmenting...");
                                 }
-                                const features = await samService.segment(
-                                    model_name=this.modelName,
-                                    image=this.image,
-                                    point_coordinates=pointCoords,
-                                    point_labels=pointLabels
-                                );
+                                features = await samService.segment(this.modelName, this.image, pointCoords, pointLabels);
                                 embeddingIsCalculated = true;
                             } catch (e) {
                                 await api.showMessage(`Failed to compute the image embedding. (Error: ${e})`);

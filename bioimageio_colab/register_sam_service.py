@@ -185,7 +185,6 @@ def segment(
 def clear_cache(embedding_cache: TTLCache, context: dict = None) -> bool:
     user_id = context["user"].get("id")
     if user_id not in embedding_cache:
-        logger.info(f"User {user_id} - User not found in cache.")
         return False
     else:
         logger.info(f"User {user_id} - Resetting embedding cache...")
