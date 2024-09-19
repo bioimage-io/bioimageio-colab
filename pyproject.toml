@@ -12,7 +12,6 @@ dependencies = [
   "numpy",
   "requests",
   "kaibu-utils",
-  "cachetools",
 ]
 
 [tool.setuptools]

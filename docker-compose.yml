@@ -5,14 +5,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        CACHEBUST: ${CACHEBUST}
     image: ghcr.io/bioimage-io/bioimageio-colab:latest
     env_file:
       - .env
     command: [
       "--server_url=https://hypha.aicell.io",
       "--workspace_name=bioimageio-colab",
-      "--client_id=model-server",
-      "--service_id=interactive-segmentation",
+      "--client_id=kubernetes",
+      "--service_id=sam",
     ]

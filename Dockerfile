@@ -26,18 +26,17 @@ RUN pip install -r /app/requirements-sam.txt
 # Copy the python script to the docker environment
 COPY ./bioimageio_colab/register_sam_service.py /app/register_sam_service.py
 
+# Copy the start service script
+COPY ./start_service.sh /app/start_service.sh
+
 # Change ownership of the application directory to the non-root user
 RUN chown -R bioimageio_colab:bioimageio_colab /app/
 
-# Add a build argument for cache invalidation
-ARG CACHEBUST=1
-
-# Fetch the Hypha server version and reinstall or upgrade hypha-rpc to the matching version
-RUN HYPHA_VERSION=$(curl -s https://hypha.aicell.io/assets/config.json | jq -r '.hypha_version') && \
-    pip install --upgrade "hypha-rpc<=$HYPHA_VERSION"
+# Make the start script executable
+RUN chmod +x /app/start_service.sh
 
 # Switch to the non-root user
 USER bioimageio_colab
 
-# Register the segmentation model as a hypha service
-ENTRYPOINT ["python", "register_sam_service.py"]
+# Use the start script as the entrypoint and forward arguments
+ENTRYPOINT ["/app/start_service.sh"]
