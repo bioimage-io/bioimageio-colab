@@ -10,7 +10,7 @@ SERVICE_ID = "sam"
 
 
 def test_service_available():
-    service_url = f"{SERVER_URL}/{WORKSPACE_NAME}/service/{CLIENT_ID}:{SERVICE_ID}/hello"
+    service_url = f"{SERVER_URL}/{WORKSPACE_NAME}/services/{CLIENT_ID}:{SERVICE_ID}/hello"
     response = requests.get(service_url)
     assert response.status_code == 200
     assert response.json() == "Welcome to the Interactive Segmentation service!"
