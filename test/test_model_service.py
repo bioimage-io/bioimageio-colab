@@ -1,27 +1,31 @@
 from hypha_rpc.sync import connect_to_server
 import numpy as np
+import requests
 
 
-def test_get_service(
-        server_url: str="https://hypha.aicell.io",
-        workspace_name: str="bioimageio-colab",
-        client_id: str="model-server",
-        service_id: str="interactive-segmentation",
-    ):
-    client = connect_to_server({"server_url": server_url, "method_timeout": 5})
+SERVER_URL = "https://hypha.aicell.io"
+WORKSPACE_NAME = "bioimageio-colab"
+CLIENT_ID = "kubernetes"
+SERVICE_ID = "sam"
+
+
+def test_service_available():
+    service_url = f"{SERVER_URL}/{WORKSPACE_NAME}/service/{CLIENT_ID}:{SERVICE_ID}/hello"
+    response = requests.get(service_url)
+    assert response.status_code == 200
+    assert response.json() == "Welcome to the Interactive Segmentation service!"
+
+def test_get_service():
+    client = connect_to_server({"server_url": SERVER_URL, "method_timeout": 5})
     assert client
 
-    sid = f"{workspace_name}/{client_id}:{service_id}"
+    sid = f"{WORKSPACE_NAME}/{CLIENT_ID}:{SERVICE_ID}"
     segment_svc = client.get_service(sid)
     assert segment_svc.id == sid
-    assert segment_svc.config.workspace == workspace_name
-    assert segment_svc.get("compute_embedding")
+    assert segment_svc.config.workspace == WORKSPACE_NAME
     assert segment_svc.get("segment")
-    assert segment_svc.get("reset_embedding")
-    assert segment_svc.get("remove_user_id")
+    assert segment_svc.get("clear_cache")
 
-    assert segment_svc.compute_embedding("vit_b", np.random.rand(256, 256))
-    features = segment_svc.segment([[128, 128]], [1])
+    features = segment_svc.segment(model_name="vit_b", image=np.random.rand(256, 256), point_coordinates=[[128, 128]], point_labels=[1])
     assert features
-    assert segment_svc.reset_embedding()
-    assert segment_svc.remove_user_id()
+    assert segment_svc.clear_cache()

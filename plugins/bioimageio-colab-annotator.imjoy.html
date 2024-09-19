@@ -30,7 +30,6 @@ class BioImageIOColabAnnotator {
         this.annotationLayer = null; // Layer displaying the annotations
         this.edgeColor = "magenta"; // Default edge color for annotations
         this.modelName = "vit_b"; // Model name for the embeddings
-        this.embeddingIsCalculated = false; // Flag to check if embeddings are calculated
     }
 
     async setup() {
@@ -41,14 +40,14 @@ class BioImageIOColabAnnotator {
         // Extract configuration settings
         const config = ctx.config || {};
         const serverUrl = config.server_url || "https://hypha.aicell.io";
-        const annotationServiceId = config.annotation_service_id;  // default for testing plugin
+        const workspace = config.workspace;
+        const token = config.token;
+        const samServiceId = "bioimageio-colab/kubernetes/sam";
+        const annotationServiceId = config.annotation_service_id || `${workspace}/*:data-provider`;  // default for testing plugin
         if(!annotationServiceId){
             await api.alert("Please provide the annotation service ID in the configuration.");
             return;
         }
-        const workspace = config.workspace
-        const token = config.token
-        const samServiceId = "bioimageio-colab/interactive-segmentation";
         
         // Create and display the viewer window
         const viewer = await api.createWindow({src: "https://kaibu.org/#/app", fullscreen: true});
@@ -77,13 +76,16 @@ class BioImageIOColabAnnotator {
         }
 
         // Get the SAM service from the server
-        let sam;
+        let samService;
         try {
-            sam = await server.getService(samServiceId);
+            samService = await server.getService(samServiceId);
         } catch (e) {
-            sam = null;
-            await api.showMessage(`Failed to get the bioimageio-colab SAM service (id=${samServiceId}). (Error: ${e})`);
+            samService = null;
+            await api.showMessage(`Failed to get the bioimageio-colab SAM service (id=${samServiceId}). Please try again later.`);
         }
+
+        // Flag to check if the image embedding is already calculated
+        let embeddingIsCalculated = false; 
 
         // Function to get a new image and set up the viewer
         const getImage = async () => {
@@ -97,10 +99,10 @@ class BioImageIOColabAnnotator {
             [this.image, this.filename] = await dataProvider.get_random_image();
             this.imageLayer = await viewer.view_image(this.image, {name: "image"});
 
-            // Reset the predictorId for the new image
-            if (sam) {
-                this.embeddingIsCalculated = false;
-                await sam.reset_embedding();
+            // Clear any previous image embeddings from the SAM service
+            if (samService) {
+                embeddingIsCalculated = false;
+                await samService.clear_cache();
             }
 
             // Add the annotation functionality to the interface
@@ -112,26 +114,29 @@ class BioImageIOColabAnnotator {
                 // Callback for adding a new feature (annotation point)
                 add_feature_callback: async (shape) => {
                     if (shape.geometry.type === "Point") {
-                        if (sam) {
+                        if (samService) {
                             // The point coordinates need to be reversed to match the coordinate convention of SAM
                             const pointCoords = [shape.geometry.coordinates.reverse()];
                             const pointLabels = pointCoords.map(() => 1); // All points have a label of 1
 
                             // Compute embeddings if not already computed for the image
-                            if (!this.embeddingIsCalculated) {
-                                await api.showMessage("Computing embeddings for the image...");
-                                try {
-                                    await sam.compute_embedding(this.modelName, this.image);
-                                } catch (e) {
-                                    await api.showMessage(`Failed to compute embeddings for the image. (Error: ${e})`);
-                                    return;
+                            try {
+                                if (!embeddingIsCalculated) {
+                                    await api.showMessage("Computing embedding and segmenting image...");
+                                } else {
+                                    await api.showMessage("Segmenting...");
                                 }
-                                this.embeddingIsCalculated = true;
+                                const features = await samService.segment(
+                                    model_name=this.modelName,
+                                    image=this.image,
+                                    point_coordinates=pointCoords,
+                                    point_labels=pointLabels
+                                );
+                                embeddingIsCalculated = true;
+                            } catch (e) {
+                                await api.showMessage(`Failed to compute the image embedding. (Error: ${e})`);
+                                return;
                             }
-
-                            // Perform segmentation
-                            await api.showMessage("Segmenting...");
-                            const features = await sam.segment(pointCoords, pointLabels);
 
                             // Add the segmented features as polygons to the annotation layer
                             for (let coords of features) {
@@ -166,7 +171,7 @@ class BioImageIOColabAnnotator {
                 await dataProvider.save_annotation(this.filename, annotation, [this.image._rshape[0], this.image._rshape[1]]);
                 await api.showMessage("Annotation saved.");
             } else {
-                await api.showMessage("Skip saving annotation.");
+                await api.showMessage("No annotation provided. Saving was skipped.");
             }
         };
 
