@@ -4,7 +4,7 @@ This is a working-in-progress project to support **collaborative data annotation
 
 ### Collaboratory annotation in the browser
 - To test a demo you can open the [BioImage.IO Crow Sourcing](https://github.com/bioimage-io/bioimageio-colab/blob/main/notebooks/BioImageIOCrowdSourcing.ipynb) notebook in [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/bioimage-io/bioimageio-colab/blob/main/notebooks/BioImageIOCrowdSourcing.ipynb).
-- To test a demo connected to cellpose model fine-tuning, open [BioImage.IO Crow Sourcing and Cellpose](https://github.com/bioimage-io/bioimageio-colab/blob/main/notebooks/BioImageIOCrowdSourcing_CellposeFinetune.ipynb) notebook in [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/bioimage-io/bioimageio-colab/blob/main/notebooks/BioImageIOCrowdSourcing_CellposeFinetune.ipynb).
+- To test a demo connected to cellpose model fine-tuning, open [BioImage.IO Crow Sourcing and Cellpose](https://github.com/bioimage-io/bioimageio-colab/blob/main/notebooks/BioImageIOCrowdSourcing_CellposeFinetune.ipynb) notebook in [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/bioimage-io/bioimageio-colab/blob/main/notebooks/BioImageIO_Colab_CellPose_finetuning.ipynb).
 
 ### Collaboratory annotation powered by Segment Anything Model (SAM)
 
