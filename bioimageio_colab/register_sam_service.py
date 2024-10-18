@@ -213,13 +213,17 @@ async def register_service(args: dict) -> None:
         }
     )
     colab_client_id = f"{args.workspace_name}/{args.client_id}"
-    n_attempts = 0
-    while colab_client_id in await test_client.list_clients():
-        n_attempts += 1
-        logger.info(
-            f"Waiting for client ID '{colab_client_id}' to be available... (attempt {n_attempts})"
-        )
-        await asyncio.sleep(1)
+    n_failed_attempts = 0
+    waiting_for_client = True
+    while waiting_for_client:
+        all_clients = await test_client.list_clients()
+        waiting_for_client = any([colab_client_id == client["id"] for client in all_clients])
+        if waiting_for_client:
+            n_failed_attempts += 1
+            logger.info(
+                f"Waiting for client ID '{colab_client_id}' to be available... (attempt {n_failed_attempts})"
+            )
+            await asyncio.sleep(1)
 
     # Connect to the workspace
     colab_client = await connect_to_server(
