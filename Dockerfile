@@ -34,7 +34,7 @@ RUN pip install -r /app/requirements-sam.txt
 COPY ./bioimageio_colab/register_sam_service.py /app/register_sam_service.py
 
 # Copy the start service script
-COPY ./start_service.sh /app/start_service.sh
+COPY ./scripts/start_service.sh /app/start_service.sh
 
 # Change ownership of the application directory to the non-root user
 RUN chown -R bioimageio_colab:bioimageio_colab /app/
