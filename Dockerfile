@@ -7,11 +7,18 @@ WORKDIR /app/
 # Create a non-root user
 RUN groupadd -r bioimageio_colab && useradd -r -g bioimageio_colab bioimageio_colab
 
-# Install necessary system packages
+# Install necessary system packages and sudo
 RUN apt-get update && apt-get install -y \
     curl \
     jq \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
+
+# Add the user bioimageio_colab to the sudo group
+RUN usermod -aG sudo bioimageio_colab
+
+# Allow passwordless sudo for bioimageio_colab
+RUN echo "bioimageio_colab ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # Upgrade pip
 RUN pip install --upgrade pip
