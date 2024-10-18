@@ -238,7 +238,7 @@ async def register_service(args: dict) -> None:
 
     # Initialize caches
     model_cache = TTLCache(maxsize=len(MODELS), ttl=args.model_timeout)
-    embedding_cache = TTLCache(maxsize=np.inf, ttl=args.embedding_timeout)
+    embedding_cache = TTLCache(maxsize=args.max_num_clients, ttl=args.embedding_timeout)
 
     # Register a new service
     service_info = await colab_client.register_service(
@@ -317,6 +317,12 @@ if __name__ == "__main__":
         type=int,
         default=600,  # 10 minutes
         help="Embedding cache timeout in seconds",
+    )
+    parser.add_argument(
+        "--max_num_clients",
+        type=int,
+        default=50,
+        help="Maximum number of clients to cache embeddings for",
     )
     args = parser.parse_args()
 
