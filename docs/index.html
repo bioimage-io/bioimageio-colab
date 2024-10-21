@@ -11,6 +11,7 @@
     <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         :root {
@@ -894,11 +895,24 @@
 
         function ShareModal({ annotationURL, setShowShareModal }) {
             const [copyFeedback, setCopyFeedback] = useState("Copy URL");
-
+            useEffect(() => {
+                // Initialize the QR code when the modal is displayed
+                new QRCode(document.getElementById('annotation-url-qrcode'), {
+                    text: annotationURL,  // Use the annotation URL for the QR code
+                    width: 600,
+                    height: 600,
+                    colorDark: '#000',
+                    colorLight: '#fff',
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+            }, [annotationURL]);  // Trigger this effect when annotationURL changes
             return (
                 <div className="modal-overlay">
                     <div className="modal">
                         <div className="modal-header">Share Annotation URL</div>
+                        <div className="modal-body flex flex-col items-center">
+                            <div id="annotation-url-qrcode" className="mb-4"></div> {/* QR code will be generated here */}
+                        </div>
                         <div className="modal-footer">
                             <button
                                 className="bg-secondary text-white px-4 py-2 rounded-md"
