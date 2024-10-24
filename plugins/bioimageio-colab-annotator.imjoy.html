@@ -47,7 +47,7 @@ class BioImageIOColabAnnotator {
             await api.alert("Please provide the annotation service ID in the configuration.");
             return;
         }
-        const samServiceId = "bioimageio-colab/kubernetes:sam";
+        const samServiceId = "bioimageio-colab/*:microsam";
         
         // Create and display the viewer window
         const viewer = await api.createWindow({src: "https://kaibu.org/#/app", fullscreen: true});
@@ -78,7 +78,7 @@ class BioImageIOColabAnnotator {
         // Get the SAM service from the server
         let samService;
         try {
-            samService = await server.getService(samServiceId);
+            samService = await server.getService(samServiceId, {"mode": "random"});
         } catch (e) {
             samService = null;
             await api.showMessage(`Failed to get the bioimageio-colab SAM service (id=${samServiceId}). Please try again later.`);
