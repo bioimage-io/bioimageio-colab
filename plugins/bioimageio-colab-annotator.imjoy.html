@@ -47,7 +47,7 @@ class BioImageIOColabAnnotator {
             await api.alert("Please provide the annotation service ID in the configuration.");
             return;
         }
-        const samServiceId = "bioimageio-colab/*:microsam";
+        const samServiceId = "bioimageio-colab/microsam";
         
         // Create and display the viewer window
         const viewer = await api.createWindow({src: "https://kaibu.org/#/app", fullscreen: true});

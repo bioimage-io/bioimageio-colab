@@ -247,10 +247,9 @@ async def register_service(args: dict) -> None:
         }
     )
     sid = service_info["id"]
-    client_service = sid.split("/")[1]
     logger.info(f"Registered service with ID: {sid}")
     logger.info(
-        f"Test the service here: {args.server_url}/{args.workspace_name}/services/{client_service}/hello"
+        f"Test the service here: {args.server_url}/{args.workspace_name}/services/{args.service_id}/hello"
     )
 
 
