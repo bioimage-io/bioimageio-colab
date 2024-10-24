@@ -5,7 +5,7 @@ import requests
 
 SERVER_URL = "https://hypha.aicell.io"
 WORKSPACE_NAME = "bioimageio-colab"
-SERVICE_ID = "sam"
+SERVICE_ID = "microsam"
 
 
 def test_service_available():
