@@ -10,7 +10,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-      id-token: write  # Required for using GitHub Actions cache
+      id-token: write  # Required for GitHub Actions cache
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -27,14 +27,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Cache Docker layers
-        uses: actions/cache@v3
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-docker-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-docker-
 
       - name: Build and push Docker image (latest tag)
         uses: docker/build-push-action@v5.0.0
