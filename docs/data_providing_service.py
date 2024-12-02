@@ -23,7 +23,7 @@ def read_image(file_path: str):
 
 def get_random_image(image_folder: str, supported_file_types: Tuple[str]):
     filenames = list_image_files(image_folder, supported_file_types)
-    r = np.random.randint(len(filenames) - 1)
+    r = np.random.randint(max(len(filenames) - 1, 1))
     file_name = filenames[r]
     image = read_image(os.path.join(image_folder, file_name))
     return (image, file_name.split(".")[0])

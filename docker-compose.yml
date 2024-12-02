@@ -11,6 +11,5 @@ services:
     command: [
       "--server_url=https://hypha.aicell.io",
       "--workspace_name=bioimageio-colab",
-      "--client_id=kubernetes",
-      "--service_id=sam",
+      "--service_id=microsam",
     ]

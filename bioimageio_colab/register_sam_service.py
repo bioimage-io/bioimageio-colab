@@ -204,33 +204,11 @@ async def register_service(args: dict) -> None:
     if not workspace_token:
         raise ValueError("Workspace token is required to connect to the Hypha server.")
 
-    # Wait until the client ID is available
-    test_client = await connect_to_server(
-        {
-            "server_url": args.server_url,
-            "workspace": args.workspace_name,
-            "token": workspace_token,
-        }
-    )
-    colab_client_id = f"{args.workspace_name}/{args.client_id}"
-    n_failed_attempts = 0
-    waiting_for_client = True
-    while waiting_for_client:
-        all_clients = await test_client.list_clients()
-        waiting_for_client = any([colab_client_id == client["id"] for client in all_clients])
-        if waiting_for_client:
-            n_failed_attempts += 1
-            logger.info(
-                f"Waiting for client ID '{colab_client_id}' to be available... (attempt {n_failed_attempts})"
-            )
-            await asyncio.sleep(1)
-
-    # Connect to the workspace
+    # Connect to the workspace (with random client ID)
     colab_client = await connect_to_server(
         {
             "server_url": args.server_url,
             "workspace": args.workspace_name,
-            "client_id": args.client_id,
             "name": "SAM Server",
             "token": workspace_token,
         }
@@ -266,14 +244,12 @@ async def register_service(args: dict) -> None:
             # - True if the embedding was removed successfully
             # - False if the user was not found in the cache
             "clear_cache": partial(clear_cache, embedding_cache),
-        },
-        {"overwrite": True},
+        }
     )
     sid = service_info["id"]
-    assert sid == f"{args.workspace_name}/{args.client_id}:{args.service_id}"
     logger.info(f"Registered service with ID: {sid}")
     logger.info(
-        f"Test the service here: {args.server_url}/{args.workspace_name}/services/{args.client_id}:{args.service_id}/hello"
+        f"Test the service here: {args.server_url}/{args.workspace_name}/services/{args.service_id}/hello"
     )
 
 
@@ -292,13 +268,8 @@ if __name__ == "__main__":
         "--workspace_name", default="bioimageio-colab", help="Name of the workspace"
     )
     parser.add_argument(
-        "--client_id",
-        default="kubernetes",
-        help="Client ID for registering the service",
-    )
-    parser.add_argument(
         "--service_id",
-        default="sam",
+        default="microsam",
         help="Service ID for registering the service",
     )
     parser.add_argument(
