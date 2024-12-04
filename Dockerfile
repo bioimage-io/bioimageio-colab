@@ -46,4 +46,4 @@ RUN chmod +x /app/start_service.sh
 USER bioimageio_colab
 
 # Use the start script as the entrypoint and forward arguments
-ENTRYPOINT ["/app/start_service.sh"]
+ENTRYPOINT ["python", "register_sam_service.py"]
