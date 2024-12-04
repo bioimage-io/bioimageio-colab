@@ -31,7 +31,7 @@ jobs:
       - name: Extract version from project.toml
         id: extract_version
         run: |
-          VERSION=$(grep '^version' project.toml | sed -E 's/version *= *"([0-9.]+)"/\1/')
+          VERSION=$(grep '^version' pyproject.toml | sed -E 's/version *= *"([0-9.]+)"/\1/')
           echo "version=$VERSION" >> $GITHUB_ENV
 
       - name: Build and push Docker image (latest and version tags)
