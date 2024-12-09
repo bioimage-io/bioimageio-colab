@@ -106,14 +106,15 @@ class BioImageIOColabAnnotator {
         // Extract configuration settings
         const config = ctx.config || {};
         const serverUrl = config.server_url || "https://hypha.aicell.io";
-        const workspace = config.workspace;
-        const token = config.token;
-        const annotationServiceId = config.annotation_service_id;
+        const workspace = config.workspace || "ws-user-github|478667";
+        const token = config.token || await hyphaWebsocketClient.login({server_url: serverUrl})
+        const annotationServiceId = config.annotation_service_id || "ws-user-github|478667/NgHCbeGjrCx9cW5MdXjX9f:data-provider-173377565681"
         if(!annotationServiceId){
             await api.alert("Please provide the annotation service ID in the configuration.");
             return;
         }
         const samServiceId = "bioimageio-colab/microsam";
+        
         
         // Create and display the viewer window
         const viewer = await api.createWindow({src: "https://kaibu.org/#/app", fullscreen: true});
@@ -196,7 +197,7 @@ class BioImageIOColabAnnotator {
                                     await api.showMessage("Segmenting...");
                                 }
                                 const embedding = await samService.compute_embedding(this.modelName, this.image)
-                                console.log("===========>", result)
+                                console.log("===========>", embedding)
                                 
                                 const features = embedding.features
                                 const dst = new ArrayBuffer(features._rvalue.byteLength);
