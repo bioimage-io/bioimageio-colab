@@ -181,6 +181,19 @@ def segment(
 
     return features
 
+def compute_embedding(model_cache: TTLCache, model_name, image, context=None):
+    user_id = context["user"].get("id")
+    sam_predictor = _load_model(model_cache, model_name, user_id)
+    logger.info(
+        f"User {user_id} - Computing image embedding (model: '{model_name}')..."
+    )
+    sam_predictor.set_image(_to_image(image))
+    return {
+        "model_name": model_name,
+        "original_size": sam_predictor.original_size,
+        "input_size": sam_predictor.input_size,
+        "features": sam_predictor.get_image_embedding().cpu().numpy(),
+    }
 
 def clear_cache(embedding_cache: TTLCache, context: dict = None) -> bool:
     user_id = context["user"].get("id")
@@ -239,6 +252,13 @@ async def register_service(args: dict) -> None:
             # Returns:
             # - a list of XY coordinates of the segmented polygon in the format (1, N, 2)
             "segment": partial(segment, model_cache, embedding_cache),
+            # **Compute the embedding of an image**
+            # Params:
+            # - model name
+            # - image to compute the embeddings on
+            # Returns:
+            # - a dictionary containing the computed embedding, original size, and input size
+            "compute_embedding": partial(compute_embedding, model_cache),
             # **Clear the embedding cache**
             # Returns:
             # - True if the embedding was removed successfully
