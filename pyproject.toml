@@ -3,11 +3,11 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = "bioimageio-colab"
-version = "0.1.2"
+version = "0.1.3"
 readme = "README.md"
 description = "Collaborative image annotation and model training with human in the loop."
 dependencies = [
-  "hypha-rpc>=0.20.41",
+  "hypha-rpc>=0.20.43",
   "requests",
   "numpy",
   "requests",
