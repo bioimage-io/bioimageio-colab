@@ -10,10 +10,10 @@ MODEL_NAME = "vit_b"
 
 
 def test_service_available():
-    service_url = f"{SERVER_URL}/{WORKSPACE_NAME}/services/{SERVICE_ID}/hello"
+    service_url = f"{SERVER_URL}/{WORKSPACE_NAME}/services/{SERVICE_ID}/ping"
     response = requests.get(service_url)
     assert response.status_code == 200
-    assert response.json() == "Welcome to the Interactive Segmentation service!"
+    assert response.json() == "pong"
 
 def test_get_service():
     client = connect_to_server({"server_url": SERVER_URL, "method_timeout": 5})

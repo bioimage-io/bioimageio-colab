@@ -208,6 +208,22 @@ def clear_cache(embedding_cache: TTLCache, context: dict = None) -> bool:
 def hello(context: dict = None) -> str:
     return "Welcome to the Interactive Segmentation service!"
 
+def ping(context: dict = None) -> str:
+    return "pong"
+
+def check_readiness():
+    # Check if the service is ready
+    return {"status": "ok"}
+
+async def check_liveness(colab_client, sid):
+    # Check if the service is alive
+    service = await colab_client.get_service(sid)
+    alive = await service.ping() == "pong"
+    if alive:
+        return {"status": "ok"}
+    else:
+        return {"success": "false", "detail": "Service is not alive"}
+
 
 async def register_service(args: dict) -> None:
     """
@@ -243,6 +259,7 @@ async def register_service(args: dict) -> None:
             },
             # Exposed functions:
             "hello": hello,
+            "ping": ping,
             # **Run segmentation**
             # Params:
             # - model name
@@ -269,7 +286,26 @@ async def register_service(args: dict) -> None:
     sid = service_info["id"]
     logger.info(f"Registered service with ID: {sid}")
     logger.info(
-        f"Test the service here: {args.server_url}/{args.workspace_name}/services/{args.service_id}/hello"
+        f"Test the service here: {args.server_url}/{args.workspace_name}/services/{sid.split('/')[1]}/hello"
+    )
+
+    # Register a probe for the service
+    probe_info = await colab_client.register_service({
+        "name": "Probes service",
+        "id": "probes",
+        "config": {
+            "visibility": "public"
+        },
+        "readiness": check_readiness,
+        "liveness": partial(check_liveness, colab_client, sid)
+    })
+    pid = probe_info["id"]
+    logger.info(f"Registered probe with ID: {pid}")
+    logger.info(
+        f"Test the readiness probe here: {args.server_url}/{args.workspace_name}/services/{pid.split('/')[1]}/readiness"
+    )
+    logger.info(
+        f"Test the liveness probe here: {args.server_url}/{args.workspace_name}/services/{pid.split('/')[1]}/liveness"
     )
 
 
