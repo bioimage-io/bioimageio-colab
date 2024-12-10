@@ -2,7 +2,7 @@ import argparse
 import io
 import os
 from functools import partial
-from logging import getLogger
+import logging
 from typing import Union
 
 import numpy as np
@@ -24,8 +24,15 @@ MODELS = {
     "vit_b_em_organelles": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/noisy-ox/1/files/vit_b.pt",
 }
 
-logger = getLogger(__name__)
+logger = logging.getLogger(__name__)
 logger.setLevel("INFO")
+# Disable propagation to avoid duplication of logs
+logger.propagate = False
+# Create a new console handler
+console_handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 
 def _load_model(
@@ -211,18 +218,18 @@ def hello(context: dict = None) -> str:
 def ping(context: dict = None) -> str:
     return "pong"
 
-def check_readiness():
+def check_readiness(service_list):
     # Check if the service is ready
+    assert len(service_list) > 0, "Service is not ready"
     return {"status": "ok"}
 
-async def check_liveness(colab_client, sid):
+async def check_liveness(colab_client, workspace_name, client_id, service_id):
     # Check if the service is alive
+    sid = f"{workspace_name}/{client_id}:{service_id}"
     service = await colab_client.get_service(sid)
     alive = await service.ping() == "pong"
-    if alive:
-        return {"status": "ok"}
-    else:
-        return {"success": "false", "detail": "Service is not alive"}
+    assert alive, "Service is not alive"
+    return {"status": "ok"}
 
 
 async def register_service(args: dict) -> None:
@@ -241,6 +248,22 @@ async def register_service(args: dict) -> None:
             "name": "SAM Server",
             "token": workspace_token,
         }
+    )
+    client_id = colab_client.config["client_id"]
+    client_base_url = f"{args.server_url}/{args.workspace_name}/services/{client_id}"
+
+    # Register a probe for the service
+    service_list = []
+    await colab_client.register_probes({
+        "readiness": partial(check_readiness, service_list),
+        "liveness": partial(check_liveness, colab_client, args.workspace_name, client_id, args.service_id)
+    })
+    logger.info(f"Probes registered in workspace: {args.workspace_name}")
+    logger.info(
+        f"Test the readiness probe here: {client_base_url}:probes/readiness"
+    )
+    logger.info(
+        f"Test the liveness probe here: {client_base_url}:probes/liveness"
     )
 
     # Initialize caches
@@ -284,29 +307,11 @@ async def register_service(args: dict) -> None:
         }
     )
     sid = service_info["id"]
-    logger.info(f"Registered service with ID: {sid}")
+    logger.info(f"Service registered with ID: {sid}")
     logger.info(
-        f"Test the service here: {args.server_url}/{args.workspace_name}/services/{sid.split('/')[1]}/hello"
+        f"Test the service here: {client_base_url}:{args.service_id}/hello"
     )
-
-    # Register a probe for the service
-    probe_info = await colab_client.register_service({
-        "name": "Probes service",
-        "id": "probes",
-        "config": {
-            "visibility": "public"
-        },
-        "readiness": check_readiness,
-        "liveness": partial(check_liveness, colab_client, sid)
-    })
-    pid = probe_info["id"]
-    logger.info(f"Registered probe with ID: {pid}")
-    logger.info(
-        f"Test the readiness probe here: {args.server_url}/{args.workspace_name}/services/{pid.split('/')[1]}/readiness"
-    )
-    logger.info(
-        f"Test the liveness probe here: {args.server_url}/{args.workspace_name}/services/{pid.split('/')[1]}/liveness"
-    )
+    service_list.append(sid)
 
 
 if __name__ == "__main__":
