@@ -6,6 +6,7 @@ import requests
 SERVER_URL = "https://hypha.aicell.io"
 WORKSPACE_NAME = "bioimageio-colab"
 SERVICE_ID = "microsam"
+MODEL_NAME = "vit_b"
 
 
 def test_service_available():
@@ -24,6 +25,19 @@ def test_get_service():
     assert segment_svc.get("segment")
     assert segment_svc.get("clear_cache")
 
-    features = segment_svc.segment(model_name="vit_b", image=np.random.rand(256, 256), point_coordinates=[[128, 128]], point_labels=[1])
+    # Test segmentation
+    image = np.random.rand(256, 256)
+    features = segment_svc.segment(model_name=MODEL_NAME, image=image, point_coordinates=[[128, 128]], point_labels=[1])
     assert features
+
+    # Test embedding caching
+    features = segment_svc.segment(model_name=MODEL_NAME, image=image, point_coordinates=[[20, 50]], point_labels=[1])
+    features = segment_svc.segment(model_name=MODEL_NAME, image=image, point_coordinates=[[180, 10]], point_labels=[1])
+
+    # Test embedding computation for running SAM client-side
+    result = segment_svc.compute_embedding(model_name=MODEL_NAME, image=image)
+    assert result
+    embedding = result["features"]
+    assert embedding.shape == (1, 256, 64, 64)
+
     assert segment_svc.clear_cache()
