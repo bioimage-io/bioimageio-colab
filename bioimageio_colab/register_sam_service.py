@@ -1,28 +1,21 @@
-import argparse
-import io
+import logging
 import os
 from functools import partial
-import logging
-from typing import Union
+from typing import Literal
 
 import numpy as np
-import requests
 import torch
-from cachetools import TTLCache
 from dotenv import find_dotenv, load_dotenv
 from hypha_rpc import connect_to_server
 from kaibu_utils import mask_to_features
-from segment_anything import SamPredictor, sam_model_registry
 
+from bioimageio_colab.sam import compute_embedding, load_model_from_ckpt, segment_image
+
+# Load environment variables
 ENV_FILE = find_dotenv()
 if ENV_FILE:
     load_dotenv(ENV_FILE)
 
-MODELS = {
-    "vit_b": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",
-    "vit_b_lm": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/diplomatic-bug/1/files/vit_b.pt",
-    "vit_b_em_organelles": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/noisy-ox/1/files/vit_b.pt",
-}
 
 logger = logging.getLogger(__name__)
 logger.setLevel("INFO")
@@ -30,205 +23,91 @@ logger.setLevel("INFO")
 logger.propagate = False
 # Create a new console handler
 console_handler = logging.StreamHandler()
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+formatter = logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+)
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
-
-
-def _load_model(
-    model_cache: TTLCache, model_name: str, user_id: str
-) -> torch.nn.Module:
-    if model_name not in MODELS:
-        raise ValueError(
-            f"Model {model_name} not found. Available models: {list(MODELS.keys())}"
-        )
-
-    # Check cache first
-    sam = model_cache.get(model_name, None)
-    if sam:
-        logger.info(
-            f"User {user_id} - Loading model '{model_name}' from cache (device={sam.device})..."
-        )
-    else:
-        # Download model if not in cache
-        model_url = MODELS[model_name]
-        logger.info(
-            f"User {user_id} - Loading model '{model_name}' from {model_url}..."
-        )
-        response = requests.get(model_url)
-        if response.status_code != 200:
-            raise RuntimeError(f"Failed to download model from {model_url}")
-        buffer = io.BytesIO(response.content)
-
-        # Load model state
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        ckpt = torch.load(buffer, map_location=device)
-        model_type = model_name[:5]
-        sam = sam_model_registry[model_type]()
-        sam.load_state_dict(ckpt)
-        logger.info(
-            f"User {user_id} - Caching model '{model_name}' (device={device})..."
-        )
-
-    # Cache the model / renew the TTL
-    model_cache[model_name] = sam
-
-    # Create a SAM predictor
-    sam_predictor = SamPredictor(sam)
-    return sam_predictor
-
-
-def _to_image(input_: np.ndarray) -> np.ndarray:
-    # we require the input to be uint8
-    if input_.dtype != np.dtype("uint8"):
-        # first normalize the input to [0, 1]
-        input_ = input_.astype("float32") - input_.min()
-        input_ = input_ / input_.max()
-        # then bring to [0, 255] and cast to uint8
-        input_ = (input_ * 255).astype("uint8")
-    if input_.ndim == 2:
-        image = np.concatenate([input_[..., None]] * 3, axis=-1)
-    elif input_.ndim == 3 and input_.shape[-1] == 3:
-        image = input_
-    else:
-        raise ValueError(
-            f"Invalid input image of shape {input_.shape}. Expect either 2D grayscale or 3D RGB image."
-        )
-    return image
-
-
-def _calculate_embedding(
-    embedding_cache: TTLCache,
-    sam_predictor: SamPredictor,
-    model_name: str,
-    image: np.ndarray,
-    user_id: str,
-) -> np.ndarray:
-    # Calculate the embedding if not cached
-    predictor_dict = embedding_cache.get(user_id, {})
-    if predictor_dict and predictor_dict.get("model_name") == model_name:
-        logger.info(
-            f"User {user_id} - Loading image embedding from cache (model: '{model_name}')..."
-        )
-        for key, value in predictor_dict.items():
-            if key != "model_name":
-                setattr(sam_predictor, key, value)
-    else:
-        logger.info(
-            f"User {user_id} - Computing image embedding (model: '{model_name}')..."
-        )
-        sam_predictor.set_image(_to_image(image))
-        logger.info(
-            f"User {user_id} - Caching image embedding (model: '{model_name}')..."
-        )
-        predictor_dict = {
-            "model_name": model_name,
-            "original_size": sam_predictor.original_size,
-            "input_size": sam_predictor.input_size,
-            "features": sam_predictor.features,  # embedding
-            "is_image_set": sam_predictor.is_image_set,
-        }
-    # Cache the embedding / renew the TTL
-    embedding_cache[user_id] = predictor_dict
-
-    return sam_predictor
-
-
-def _segment_image(
-    sam_predictor: SamPredictor,
-    model_name: str,
-    point_coordinates: Union[list, np.ndarray],
-    point_labels: Union[list, np.ndarray],
-    user_id: str,
-):
-    if isinstance(point_coordinates, list):
-        point_coordinates = np.array(point_coordinates, dtype=np.float32)
-    if isinstance(point_labels, list):
-        point_labels = np.array(point_labels, dtype=np.float32)
-    logger.debug(
-        f"User {user_id} - point coordinates: {point_coordinates}, {point_labels}"
-    )
-    logger.info(f"User {user_id} - Segmenting image (model: '{model_name}')...")
-    mask, scores, logits = sam_predictor.predict(
-        point_coords=point_coordinates[:, ::-1],  # SAM has reversed XY conventions
-        point_labels=point_labels,
-        multimask_output=False,
-    )
-    logger.debug(f"User {user_id} - predicted mask of shape {mask.shape}")
-    features = mask_to_features(mask[0])
-    return features
-
-
-def segment(
-    model_cache: TTLCache,
-    embedding_cache: TTLCache,
-    model_name: str,
-    image: np.ndarray,
-    point_coordinates: Union[list, np.ndarray],
-    point_labels: Union[list, np.ndarray],
-    context: dict = None,
-) -> list:
-    user_id = context["user"].get("id")
-    if not user_id:
-        logger.info("User ID not found in context.")
-        return False
-
-    # Load the model
-    sam_predictor = _load_model(model_cache, model_name, user_id)
-
-    # Calculate the embedding
-    sam_predictor = _calculate_embedding(
-        embedding_cache, sam_predictor, model_name, image, user_id
-    )
-
-    # Segment the image
-    features = _segment_image(
-        sam_predictor, model_name, point_coordinates, point_labels, user_id
-    )
-
-    return features
-
-def compute_embedding(model_cache: TTLCache, model_name, image, context=None):
-    user_id = context["user"].get("id")
-    sam_predictor = _load_model(model_cache, model_name, user_id)
-    logger.info(
-        f"User {user_id} - Computing image embedding (model: '{model_name}')..."
-    )
-    sam_predictor.set_image(_to_image(image))
-    return {
-        "model_name": model_name,
-        "original_size": sam_predictor.original_size,
-        "input_size": sam_predictor.input_size,
-        "features": sam_predictor.get_image_embedding().cpu().numpy(),
-    }
-
-def clear_cache(embedding_cache: TTLCache, context: dict = None) -> bool:
-    user_id = context["user"].get("id")
-    if user_id not in embedding_cache:
-        return False
-    else:
-        logger.info(f"User {user_id} - Resetting embedding cache...")
-        del embedding_cache[user_id]
-        return True
 
 
 def hello(context: dict = None) -> str:
     return "Welcome to the Interactive Segmentation service!"
 
-def ping(context: dict = None) -> str:
-    return "pong"
 
-def check_readiness(service_list):
-    # Check if the service is ready
-    assert len(service_list) > 0, "Service is not ready"
+def ping(context: dict = None) -> str:
     return {"status": "ok"}
 
-async def check_liveness(colab_client, workspace_name, client_id, service_id):
-    # Check if the service is alive
-    sid = f"{workspace_name}/{client_id}:{service_id}"
-    service = await colab_client.get_service(sid)
-    alive = await service.ping() == "pong"
-    assert alive, "Service is not alive"
+
+def compute_image_embedding(
+    cache_dir: str,
+    ray_address: str,
+    model_name: str,
+    image: np.ndarray,
+    context: dict = None,
+) -> np.ndarray:
+    """
+    Compute the embeddings of an image using the specified model.
+    """
+    user_id = context["user"].get("id")
+    logger.info(f"User '{user_id}' - Computing embedding (model: '{model_name}')...")
+
+    sam_predictor = load_model_from_ckpt(model_name, cache_dir)
+    sam_predictor = compute_embedding(sam_predictor, image)
+
+    logger.info(f"User '{user_id}' - Embedding computed successfully.")
+
+    return sam_predictor.features.detach().cpu().numpy()
+
+
+def compute_mask(
+    cache_dir: str,
+    ray_address: str,
+    model_name: str,
+    embedding: np.ndarray,
+    image_size: tuple,
+    point_coords: np.ndarray,
+    point_labels: np.ndarray,
+    format: Literal["mask", "kaibu"],
+    context: dict = None,
+) -> np.ndarray:
+    """
+    Segment the image using the specified model and the provided point coordinates and labels.
+    """
+    user_id = context["user"].get("id")
+    logger.info(f"User '{user_id}' - Segmenting image (model: '{model_name}')...")
+
+    if not format in ["mask", "kaibu"]:
+        raise ValueError("Invalid format. Please choose either 'mask' or 'kaibu'.")
+
+    # Load the model
+    sam_predictor = load_model_from_ckpt(model_name, cache_dir)
+
+    # Set the embedding
+    sam_predictor.original_size = image_size
+    sam_predictor.input_size = tuple([sam_predictor.model.image_encoder.img_size] * 2)
+    sam_predictor.features = torch.as_tensor(embedding, device=sam_predictor.device)
+    sam_predictor.is_image_set = True
+
+    # Segment the image
+    masks = segment_image(sam_predictor, point_coords, point_labels)
+
+    if format == "mask":
+        features = masks
+    elif format == "kaibu":
+        features = [mask_to_features(mask) for mask in masks]
+
+    logger.info(f"User '{user_id}' - Image segmented successfully.")
+
+    return features
+
+
+def test_model(cache_dir: str, ray_address: str, model_name: str, context: dict = None):
+    """
+    Test the segmentation service.
+    """
+    image = np.random.rand(1024, 1024, 3)
+    embedding = compute_image_embedding(cache_dir, model_name, image, context)
+    assert embedding
     return {"status": "ok"}
 
 
@@ -252,24 +131,6 @@ async def register_service(args: dict) -> None:
     client_id = colab_client.config["client_id"]
     client_base_url = f"{args.server_url}/{args.workspace_name}/services/{client_id}"
 
-    # Register a probe for the service
-    service_list = []
-    await colab_client.register_probes({
-        "readiness": partial(check_readiness, service_list),
-        "liveness": partial(check_liveness, colab_client, args.workspace_name, client_id, args.service_id)
-    })
-    logger.info(f"Probes registered in workspace: {args.workspace_name}")
-    logger.info(
-        f"Test the readiness probe here: {client_base_url}:probes/readiness"
-    )
-    logger.info(
-        f"Test the liveness probe here: {client_base_url}:probes/liveness"
-    )
-
-    # Initialize caches
-    model_cache = TTLCache(maxsize=len(MODELS), ttl=args.model_timeout)
-    embedding_cache = TTLCache(maxsize=args.max_num_clients, ttl=args.embedding_timeout)
-
     # Register a new service
     service_info = await colab_client.register_service(
         {
@@ -283,81 +144,38 @@ async def register_service(args: dict) -> None:
             # Exposed functions:
             "hello": hello,
             "ping": ping,
-            # **Run segmentation**
-            # Params:
-            # - model name
-            # - image to compute the embeddings on
-            # - point coordinates (XY format)
-            # - point labels
-            # Returns:
-            # - a list of XY coordinates of the segmented polygon in the format (1, N, 2)
-            "segment": partial(segment, model_cache, embedding_cache),
-            # **Compute the embedding of an image**
-            # Params:
-            # - model name
-            # - image to compute the embeddings on
-            # Returns:
-            # - a dictionary containing the computed embedding, original size, and input size
-            "compute_embedding": partial(compute_embedding, model_cache),
-            # **Clear the embedding cache**
-            # Returns:
-            # - True if the embedding was removed successfully
-            # - False if the user was not found in the cache
-            "clear_cache": partial(clear_cache, embedding_cache),
+            "compute_embedding": partial(
+                compute_image_embedding, args.cache_dir, ray_address=args.ray_address
+            ),
+            "compute_mask": partial(
+                compute_mask, args.cache_dir, ray_address=args.ray_address
+            ),
+            "test_model": partial(
+                test_model, args.cache_dir, ray_address=args.ray_address
+            ),
         }
     )
     sid = service_info["id"]
     logger.info(f"Service registered with ID: {sid}")
-    logger.info(
-        f"Test the service here: {client_base_url}:{args.service_id}/hello"
-    )
-    service_list.append(sid)
+    logger.info(f"Test the service here: {client_base_url}:{args.service_id}/hello")
 
 
 if __name__ == "__main__":
-    import asyncio
-
-    parser = argparse.ArgumentParser(
-        description="Register SAM annotation service on BioImageIO Colab workspace."
+    model_name = "vit_b"
+    cache_dir = "./models"
+    embedding = compute_image_embedding(
+        cache_dir=cache_dir,
+        model_name=model_name,
+        image=np.random.rand(1024, 1024, 3),
+        context={"user": {"id": "test"}},
     )
-    parser.add_argument(
-        "--server_url",
-        default="https://hypha.aicell.io",
-        help="URL of the Hypha server",
+    mask = compute_mask(
+        cache_dir=cache_dir,
+        model_name="vit_b",
+        embedding=embedding,
+        image_size=(1024, 1024),
+        point_coords=np.array([[10, 10]]),
+        point_labels=np.array([1]),
+        format="kaibu",
+        context={"user": {"id": "test"}},
     )
-    parser.add_argument(
-        "--workspace_name", default="bioimageio-colab", help="Name of the workspace"
-    )
-    parser.add_argument(
-        "--service_id",
-        default="microsam",
-        help="Service ID for registering the service",
-    )
-    parser.add_argument(
-        "--token",
-        default=None,
-        help="Workspace token for connecting to the Hypha server",
-    )
-    parser.add_argument(
-        "--model_timeout",
-        type=int,
-        default=9600,  # 3 hours
-        help="Model cache timeout in seconds",
-    )
-    parser.add_argument(
-        "--embedding_timeout",
-        type=int,
-        default=600,  # 10 minutes
-        help="Embedding cache timeout in seconds",
-    )
-    parser.add_argument(
-        "--max_num_clients",
-        type=int,
-        default=50,
-        help="Maximum number of clients to cache embeddings for",
-    )
-    args = parser.parse_args()
-
-    loop = asyncio.get_event_loop()
-    loop.create_task(register_service(args=args))
-    loop.run_forever()

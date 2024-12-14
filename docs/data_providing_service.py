@@ -29,8 +29,10 @@ def get_random_image(image_folder: str, supported_file_types: Tuple[str]):
     return (image, file_name.split(".")[0])
 
 
-def save_annotation(annotations_folder: str, image_name: str, features, image_shape):
-    mask = features_to_mask(features, image_shape)
+def save_annotation(
+    annotations_folder: str, image_name: str, features: list, image_shape: tuple
+):
+    mask = features_to_mask(features, image_shape[:2])
     n_image_masks = len(
         [f for f in os.listdir(annotations_folder) if f.startswith(image_name)]
     )
@@ -55,6 +57,7 @@ def upload_image_to_s3():
     # TODO: register a data providing service on K8S cluster that uses the user prefix (get_random_image_s3, save_annotation_s3)
     """
     raise NotImplementedError
+
 
 async def register_service(
     server_url: str,
@@ -82,7 +85,7 @@ async def register_service(
         {
             "name": name,
             "description": description,
-            "id": "data-provider-" + str(int(time.time()*100)),
+            "id": "data-provider-" + str(int(time.time() * 100)),
             "type": "annotation-data-provider",
             "config": {
                 "visibility": "public",  # TODO: make protected
