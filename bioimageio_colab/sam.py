@@ -99,6 +99,6 @@ def segment_image(
 
 
 if __name__ == "__main__":
-    sam_predictor = load_model_from_ckpt("vit_b", "./model_cache")
+    sam_predictor = load_model_from_ckpt("vit_b_lm", "./model_cache")
     sam_predictor = compute_embedding(sam_predictor, np.random.rand(1024, 1024))
     masks = segment_image(sam_predictor, [[10, 10]], [1])

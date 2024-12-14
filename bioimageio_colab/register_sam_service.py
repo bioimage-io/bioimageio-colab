@@ -251,7 +251,7 @@ async def register_service(args: dict) -> None:
 
 
 if __name__ == "__main__":
-    model_name = "vit_b"
+    model_name = "vit_b_lm"
     cache_dir = "./model_cache"
     embedding = compute_image_embedding(
         cache_dir=cache_dir,
@@ -261,7 +261,7 @@ if __name__ == "__main__":
     )
     mask = compute_mask(
         cache_dir=cache_dir,
-        model_name="vit_b",
+        model_name="vit_b_lm",
         embedding=embedding,
         image_size=(1024, 1024),
         point_coords=np.array([[10, 10]]),

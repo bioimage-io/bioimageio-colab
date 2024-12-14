@@ -6,7 +6,7 @@ from bioimageio_colab.register_sam_service import compute_image_embedding, compu
 SERVER_URL = "https://hypha.aicell.io"
 WORKSPACE_NAME = "bioimageio-colab"
 SERVICE_ID = "microsam"
-MODEL_NAME = "vit_b"
+MODEL_NAME = "vit_b_lm"
 
 
 def test_service_functions():
@@ -77,5 +77,5 @@ def test_service_python_api():
     # assert len(polygon_features) == 1  # Only one point given
 
     # Test service test run
-    result = segment_svc.test_model(model_name="vit_b")
+    result = segment_svc.test_model(model_name="vit_b_lm")
     assert result == {"status": "ok"}
