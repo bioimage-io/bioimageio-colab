@@ -48,11 +48,17 @@ def compute_image_embedding(
     """
     Compute the embeddings of an image using the specified model.
     """
-    user_id = context["user"].get("id")
+    user_id = context["user"].get("id") if context else "anonymous"
     logger.info(f"User '{user_id}' - Computing embedding (model: '{model_name}')...")
 
-    sam_predictor = load_model_from_ckpt(model_name, cache_dir)
-    sam_predictor = compute_embedding(sam_predictor, image)
+    sam_predictor = load_model_from_ckpt(
+        model_name=model_name,
+        cache_dir=cache_dir,
+    )
+    sam_predictor = compute_embedding(
+        sam_predictor=sam_predictor,
+        array=image,
+    )
 
     logger.info(f"User '{user_id}' - Embedding computed successfully.")
 
@@ -67,20 +73,23 @@ def compute_mask(
     image_size: tuple,
     point_coords: np.ndarray,
     point_labels: np.ndarray,
-    format: Literal["mask", "kaibu"],
+    format: Literal["mask", "kaibu"] = "mask",
     context: dict = None,
 ) -> np.ndarray:
     """
     Segment the image using the specified model and the provided point coordinates and labels.
     """
-    user_id = context["user"].get("id")
+    user_id = context["user"].get("id") if context else "anonymous"
     logger.info(f"User '{user_id}' - Segmenting image (model: '{model_name}')...")
 
     if not format in ["mask", "kaibu"]:
         raise ValueError("Invalid format. Please choose either 'mask' or 'kaibu'.")
 
     # Load the model
-    sam_predictor = load_model_from_ckpt(model_name, cache_dir)
+    sam_predictor = load_model_from_ckpt(
+        model_name=model_name,
+        cache_dir=cache_dir,
+    )
 
     # Set the embedding
     sam_predictor.original_size = image_size
@@ -89,7 +98,11 @@ def compute_mask(
     sam_predictor.is_image_set = True
 
     # Segment the image
-    masks = segment_image(sam_predictor, point_coords, point_labels)
+    masks = segment_image(
+        sam_predictor=sam_predictor,
+        point_coords=point_coords,
+        point_labels=point_labels,
+    )
 
     if format == "mask":
         features = masks
@@ -105,9 +118,16 @@ def test_model(cache_dir: str, ray_address: str, model_name: str, context: dict 
     """
     Test the segmentation service.
     """
-    image = np.random.rand(1024, 1024, 3)
-    embedding = compute_image_embedding(cache_dir, model_name, image, context)
-    assert embedding
+    image = np.random.rand(1024, 1024)
+    embedding = compute_image_embedding(
+        cache_dir=cache_dir,
+        ray_address=ray_address,
+        model_name=model_name,
+        image=image,
+        context=context,
+    )
+    assert isinstance(embedding, np.ndarray)
+    assert embedding.shape == (1, 256, 64, 64)
     return {"status": "ok"}
 
 
@@ -145,13 +165,15 @@ async def register_service(args: dict) -> None:
             "hello": hello,
             "ping": ping,
             "compute_embedding": partial(
-                compute_image_embedding, args.cache_dir, ray_address=args.ray_address
+                compute_image_embedding,
+                cache_dir=args.cache_dir,
+                ray_address=args.ray_address,
             ),
             "compute_mask": partial(
-                compute_mask, args.cache_dir, ray_address=args.ray_address
+                compute_mask, cache_dir=args.cache_dir, ray_address=args.ray_address
             ),
             "test_model": partial(
-                test_model, args.cache_dir, ray_address=args.ray_address
+                test_model, cache_dir=args.cache_dir, ray_address=args.ray_address
             ),
         }
     )
@@ -166,7 +188,7 @@ if __name__ == "__main__":
     embedding = compute_image_embedding(
         cache_dir=cache_dir,
         model_name=model_name,
-        image=np.random.rand(1024, 1024, 3),
+        image=np.random.rand(1024, 1024),
         context={"user": {"id": "test"}},
     )
     mask = compute_mask(
