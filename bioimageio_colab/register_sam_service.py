@@ -48,21 +48,25 @@ def compute_image_embedding(
     """
     Compute the embeddings of an image using the specified model.
     """
-    user_id = context["user"].get("id") if context else "anonymous"
-    logger.info(f"User '{user_id}' - Computing embedding (model: '{model_name}')...")
+    try:
+        user_id = context["user"].get("id") if context else "anonymous"
+        logger.info(f"User '{user_id}' - Computing embedding (model: '{model_name}')...")
 
-    sam_predictor = load_model_from_ckpt(
-        model_name=model_name,
-        cache_dir=cache_dir,
-    )
-    sam_predictor = compute_embedding(
-        sam_predictor=sam_predictor,
-        array=image,
-    )
+        sam_predictor = load_model_from_ckpt(
+            model_name=model_name,
+            cache_dir=cache_dir,
+        )
+        sam_predictor = compute_embedding(
+            sam_predictor=sam_predictor,
+            array=image,
+        )
 
-    logger.info(f"User '{user_id}' - Embedding computed successfully.")
+        logger.info(f"User '{user_id}' - Embedding computed successfully.")
 
-    return sam_predictor.features.detach().cpu().numpy()
+        return sam_predictor.features.detach().cpu().numpy()
+    except Exception as e:
+        logger.error(f"User '{user_id}' - Error computing embedding: {e}")
+        raise e
 
 
 def compute_mask(
@@ -79,39 +83,43 @@ def compute_mask(
     """
     Segment the image using the specified model and the provided point coordinates and labels.
     """
-    user_id = context["user"].get("id") if context else "anonymous"
-    logger.info(f"User '{user_id}' - Segmenting image (model: '{model_name}')...")
+    try:
+        user_id = context["user"].get("id") if context else "anonymous"
+        logger.info(f"User '{user_id}' - Segmenting image (model: '{model_name}')...")
 
-    if not format in ["mask", "kaibu"]:
-        raise ValueError("Invalid format. Please choose either 'mask' or 'kaibu'.")
+        if not format in ["mask", "kaibu"]:
+            raise ValueError("Invalid format. Please choose either 'mask' or 'kaibu'.")
 
-    # Load the model
-    sam_predictor = load_model_from_ckpt(
-        model_name=model_name,
-        cache_dir=cache_dir,
-    )
+        # Load the model
+        sam_predictor = load_model_from_ckpt(
+            model_name=model_name,
+            cache_dir=cache_dir,
+        )
 
-    # Set the embedding
-    sam_predictor.original_size = image_size
-    sam_predictor.input_size = tuple([sam_predictor.model.image_encoder.img_size] * 2)
-    sam_predictor.features = torch.as_tensor(embedding, device=sam_predictor.device)
-    sam_predictor.is_image_set = True
+        # Set the embedding
+        sam_predictor.original_size = image_size
+        sam_predictor.input_size = tuple([sam_predictor.model.image_encoder.img_size] * 2)
+        sam_predictor.features = torch.as_tensor(embedding, device=sam_predictor.device)
+        sam_predictor.is_image_set = True
 
-    # Segment the image
-    masks = segment_image(
-        sam_predictor=sam_predictor,
-        point_coords=point_coords,
-        point_labels=point_labels,
-    )
+        # Segment the image
+        masks = segment_image(
+            sam_predictor=sam_predictor,
+            point_coords=point_coords,
+            point_labels=point_labels
+        )
 
-    if format == "mask":
-        features = masks
-    elif format == "kaibu":
-        features = [mask_to_features(mask) for mask in masks]
+        if format == "mask":
+            features = masks
+        elif format == "kaibu":
+            features = [mask_to_features(mask) for mask in masks]
 
-    logger.info(f"User '{user_id}' - Image segmented successfully.")
+        logger.info(f"User '{user_id}' - Image segmented successfully.")
 
-    return features
+        return features
+    except Exception as e:
+        logger.error(f"User '{user_id}' - Error segmenting image: {e}")
+        raise e
 
 
 def test_model(cache_dir: str, ray_address: str, model_name: str, context: dict = None):
@@ -152,6 +160,7 @@ async def register_service(args: dict) -> None:
     client_base_url = f"{args.server_url}/{args.workspace_name}/services/{client_id}"
 
     # Register a new service
+    cache_dir = os.path.abspath(args.cache_dir)
     service_info = await colab_client.register_service(
         {
             "name": "Interactive Segmentation",
@@ -165,15 +174,13 @@ async def register_service(args: dict) -> None:
             "hello": hello,
             "ping": ping,
             "compute_embedding": partial(
-                compute_image_embedding,
-                cache_dir=args.cache_dir,
-                ray_address=args.ray_address,
+                compute_image_embedding, cache_dir=cache_dir, ray_address=args.ray_address
             ),
             "compute_mask": partial(
-                compute_mask, cache_dir=args.cache_dir, ray_address=args.ray_address
+                compute_mask, cache_dir=cache_dir, ray_address=args.ray_address
             ),
             "test_model": partial(
-                test_model, cache_dir=args.cache_dir, ray_address=args.ray_address
+                test_model, cache_dir=cache_dir, ray_address=args.ray_address
             ),
         }
     )
@@ -184,7 +191,7 @@ async def register_service(args: dict) -> None:
 
 if __name__ == "__main__":
     model_name = "vit_b"
-    cache_dir = "./models"
+    cache_dir = "./model_cache"
     embedding = compute_image_embedding(
         cache_dir=cache_dir,
         model_name=model_name,
