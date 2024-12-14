@@ -7,8 +7,8 @@ from docs.data_providing_service import get_random_image
 
 
 def test_sam():
-    sam_predictor = load_model_from_ckpt(model_name="vit_b", cache_dir="./models/")
-    assert os.path.exists("./models/sam_vit_b_01ec64.pth")
+    sam_predictor = load_model_from_ckpt(model_name="vit_b", cache_dir="./model_cache/")
+    assert os.path.exists("./model_cache/sam_vit_b_01ec64.pth")
     image, _ = get_random_image(
         image_folder="./bioimageio_colab/",
         supported_file_types=("tif"),

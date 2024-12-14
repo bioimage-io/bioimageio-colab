@@ -31,19 +31,16 @@ COPY ./requirements-sam.txt /app/requirements-sam.txt
 RUN pip install -r /app/requirements-sam.txt
 
 # Copy the python script to the docker environment
-COPY ./bioimageio_colab/register_sam_service.py /app/register_sam_service.py
+COPY ./bioimageio_colab /app/bioimageio_colab
 
-# Copy the start service script
-COPY ./scripts/start_service.sh /app/start_service.sh
+# Create cache directory for models
+RUN mkdir -p /app/.model_cache
 
 # Change ownership of the application directory to the non-root user
 RUN chown -R bioimageio_colab:bioimageio_colab /app/
-
-# Make the start script executable
-RUN chmod +x /app/start_service.sh
 
 # Switch to the non-root user
 USER bioimageio_colab
 
 # Use the start script as the entrypoint and forward arguments
-ENTRYPOINT ["python", "register_sam_service.py"]
+ENTRYPOINT ["python", "-m", "bioimageio_colab"]

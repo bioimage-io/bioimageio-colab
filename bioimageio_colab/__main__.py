@@ -27,7 +27,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--cache_dir",
-        default="./models",
+        default="./.model_cache",
         help="Directory for caching the models",
     )
     parser.add_argument(

@@ -10,7 +10,7 @@ MODEL_NAME = "vit_b"
 
 
 def test_service_functions():
-    cache_dir = "./models"
+    cache_dir = "./model_cache"
     embedding = compute_image_embedding(
         cache_dir=cache_dir,
         ray_address=None,
