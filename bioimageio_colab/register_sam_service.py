@@ -207,7 +207,7 @@ async def register_service(args: dict) -> None:
         )
         runtime_env = {
             "pip": base_requirements + sam_requirements,
-            "py_modules": ["../bioimageio_colab"],
+            "py_modules": [os.path.join(base_dir, "bioimageio_colab")],
         }
 
         # Connect to Ray
@@ -283,6 +283,6 @@ if __name__ == "__main__":
     )
     runtime_env = {
         "pip": base_requirements + sam_requirements,
-        "py_modules": ["../bioimageio_colab"],
+        "py_modules": [os.path.join(base_dir, "bioimageio_colab")],
     }
     print(runtime_env)
