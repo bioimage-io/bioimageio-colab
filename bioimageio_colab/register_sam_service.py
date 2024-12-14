@@ -198,8 +198,13 @@ async def register_service(args: dict) -> None:
 
     if args.ray_address:
         # Create runtime environment
-        base_requirements = parse_requirements("../requirements.txt")
-        sam_requirements = parse_requirements("../requirements-sam.txt")
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        base_requirements = parse_requirements(
+            os.path.join(base_dir, "requirements.txt")
+        )
+        sam_requirements = parse_requirements(
+            os.path.join(base_dir, "requirements-sam.txt")
+        )
         runtime_env = {
             "pip": base_requirements + sam_requirements,
             "py_modules": ["../bioimageio_colab"],
@@ -253,6 +258,7 @@ async def register_service(args: dict) -> None:
 if __name__ == "__main__":
     model_name = "vit_b_lm"
     cache_dir = "./model_cache"
+
     embedding = compute_image_embedding(
         cache_dir=cache_dir,
         model_name=model_name,
@@ -269,3 +275,14 @@ if __name__ == "__main__":
         format="kaibu",
         context={"user": {"id": "test"}},
     )
+
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    base_requirements = parse_requirements(os.path.join(base_dir, "requirements.txt"))
+    sam_requirements = parse_requirements(
+        os.path.join(base_dir, "requirements-sam.txt")
+    )
+    runtime_env = {
+        "pip": base_requirements + sam_requirements,
+        "py_modules": ["../bioimageio_colab"],
+    }
+    print(runtime_env)
