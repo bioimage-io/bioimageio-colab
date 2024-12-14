@@ -31,7 +31,7 @@ console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
 
-def parse_requirements(file_path):
+def parse_requirements(file_path) -> list:
     with open(file_path, "r") as file:
         lines = file.readlines()
     # Filter and clean package names (skip comments and empty lines)
@@ -78,7 +78,7 @@ def compute_image_embedding(
         raise e
     
 @ray.remote
-def compute_image_embedding_ray(kwargs: dict):
+def compute_image_embedding_ray(kwargs: dict) -> np.ndarray:
     from bioimageio_colab.register_sam_service import compute_image_embedding
 
     return compute_image_embedding(**kwargs)
@@ -136,13 +136,13 @@ def compute_mask(
         raise e
     
 @ray.remote
-def compute_mask_ray(kwargs: dict):
+def compute_mask_ray(kwargs: dict) -> np.ndarray:
     from bioimageio_colab.register_sam_service import compute_mask
 
     return compute_mask(**kwargs)
 
 
-def test_model(cache_dir: str, model_name: str, context: dict = None):
+def test_model(cache_dir: str, model_name: str, context: dict = None) -> dict:
     """
     Test the segmentation service.
     """
@@ -159,7 +159,7 @@ def test_model(cache_dir: str, model_name: str, context: dict = None):
 
 
 @ray.remote
-def test_model_ray(kwargs: dict):
+def test_model_ray(kwargs: dict) -> dict:
     from bioimageio_colab.register_sam_service import test_model
 
     return test_model(**kwargs)
@@ -184,36 +184,37 @@ async def register_service(args: dict) -> None:
     )
     client_id = colab_client.config["client_id"]
     client_base_url = f"{args.server_url}/{args.workspace_name}/services/{client_id}"
+    cache_dir = os.path.abspath(args.cache_dir)
 
     if args.ray_address:
         # Create runtime environment
         base_requirements = parse_requirements("../requirements.txt")
         sam_requirements = parse_requirements("../requirements-sam.txt")
-
         runtime_env = {
-            "pip": {
-                "pip": base_requirements + sam_requirements,
-            },
+            "pip": base_requirements + sam_requirements,
             "py_modules": ["../bioimageio_colab"]
         }
 
+        # Connect to Ray
         ray.init(runtime_env=runtime_env, address=args.ray_address)
 
-        def compute_embedding_function(kwargs: dict):
+        def compute_embedding_function(**kwargs: dict):
+            kwargs["cache_dir"] = cache_dir
             return ray.get(compute_image_embedding_ray.remote(kwargs))
-        
-        def compute_mask_function(kwargs: dict):
+
+        def compute_mask_function(**kwargs: dict):
+            kwargs["cache_dir"] = cache_dir
             return ray.get(compute_mask_ray.remote(kwargs))
-        
-        def test_model_function(kwargs: dict):
+
+        def test_model_function(**kwargs: dict):
+            kwargs["cache_dir"] = cache_dir
             return ray.get(test_model_ray.remote(kwargs))
     else:
-        compute_embedding_function = compute_image_embedding
-        compute_mask_function = compute_mask
-        test_model_function = test_model
+        compute_embedding_function = partial(compute_image_embedding, cache_dir=cache_dir)
+        compute_mask_function = partial(compute_mask, cache_dir=cache_dir)
+        test_model_function = partial(test_model, cache_dir=cache_dir)
 
     # Register a new service
-    cache_dir = os.path.abspath(args.cache_dir)
     service_info = await colab_client.register_service(
         {
             "name": "Interactive Segmentation",
@@ -226,9 +227,9 @@ async def register_service(args: dict) -> None:
             # Exposed functions:
             "hello": hello,
             "ping": ping,
-            "compute_embedding": partial(compute_embedding_function, cache_dir=args.cache_dir),
-            "compute_mask": partial(compute_mask_function, cache_dir=args.cache_dir),
-            "test_model": partial(test_model_function, cache_dir=args.cache_dir),
+            "compute_embedding": compute_embedding_function,
+            "compute_mask": compute_mask_function,
+            "test_model": test_model_function,
         }
     )
     sid = service_info["id"]
