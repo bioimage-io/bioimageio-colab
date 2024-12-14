@@ -224,6 +224,8 @@ async def register_service(args: dict) -> None:
         def test_model_function(**kwargs: dict):
             kwargs["cache_dir"] = cache_dir
             return ray.get(test_model_ray.remote(kwargs))
+        
+        logger.info(f"Successfully connected to Ray (version: {ray.__version__})")
 
     else:
         compute_embedding_function = partial(
