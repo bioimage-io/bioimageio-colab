@@ -13,7 +13,6 @@ def test_service_functions():
     cache_dir = "./model_cache"
     embedding = compute_image_embedding(
         cache_dir=cache_dir,
-        ray_address=None,
         model_name=MODEL_NAME,
         image=np.random.rand(1024, 1024),
         context={"user": {"id": "test"}},
@@ -23,7 +22,6 @@ def test_service_functions():
 
     polygon_features = compute_mask(
         cache_dir=cache_dir,
-        ray_address=None,
         model_name=MODEL_NAME,
         embedding=embedding,
         image_size=(1024, 1024),
