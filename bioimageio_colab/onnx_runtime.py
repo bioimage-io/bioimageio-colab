@@ -2,15 +2,16 @@
 # pip install opencv-python
 # pip install onnxruntime
 
-#%%
-from tifffile import imread
-import numpy as np
-from hypha_rpc.sync import connect_to_server
-import urllib.request
-import onnxruntime as ort
-import matplotlib.pyplot as plt
+#%% Imports
 import cv2
-import json
+import matplotlib.pyplot as plt
+import numpy as np
+import onnxruntime as ort
+import os
+import urllib.request
+from hypha_rpc.sync import connect_to_server
+from tifffile import imread
+from kaibu_utils import mask_to_features
 
 
 #%% Read example image
@@ -25,36 +26,42 @@ cv2.imwrite("example_image.png", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
 # Reverse the color channels to match matplotlib's default color mapping
 image = image[..., ::-1]
 
+
 # %% Connect to SAM service and compute image embedding
-server_url = "https://hypha.aicell.io"
-workspace_name = "bioimageio-colab"
-service_id = "microsam"
-model_name = "vit_b_lm"
+if not os.path.exists("example_image_embeddings.bin"):
+    server_url = "https://hypha.aicell.io"
+    workspace_name = "bioimageio-colab"
+    service_id = "microsam"
+    model_name = "vit_b_lm"
 
-client = connect_to_server({"server_url": server_url, "method_timeout": 5})
-sid = f"{workspace_name}/{service_id}"
-svc = client.get_service(sid, {"mode": "random"})
-result = svc.compute_embedding(model_name=model_name, image=image)
+    client = connect_to_server({"server_url": server_url, "method_timeout": 5})
+    sid = f"{workspace_name}/{service_id}"
+    svc = client.get_service(sid, {"mode": "random"})
+    features = svc.compute_embedding(model_name=model_name, image=image)
 
-print(result.keys())
-print(result["features"].shape)
+    print(features.shape)
 
-#%% Save the embeddings to a binary file (.bin)
-result.features.tofile("example_image_embeddings.bin")
+    # Save the embeddings to a binary file (.bin)
+    features.tofile("example_image_embeddings.bin")
+else:
+    # Load the embeddings from the binary file
+    features = np.fromfile("example_image_embeddings.bin", dtype=np.float32)
+
+    # Reshape the embeddings to the expected shape
+    features = features.reshape(1, 256, 64, 64)
 
 
 # %% Load the SAM decoder model
 model_url = "https://uk1s3.embassy.ebi.ac.uk/public-datasets/sam-vit_b_lm-decoder/1/model.onnx"
 local_model_path = "model.onnx"
 
-urllib.request.urlretrieve(model_url, local_model_path)
+if not os.path.exists(local_model_path):
+    urllib.request.urlretrieve(model_url, local_model_path)
+
 model = ort.InferenceSession(local_model_path)
 
 # %%
-def model_data(clicks, tensor, model_scale):
-    # Set image embeddings
-    image_embedding = tensor
-
+def model_data(clicks, image_embedding, model_scale):
     # Initialize variables
     point_coords = None
     point_labels = None
@@ -113,7 +120,7 @@ point_coords = [(80, 80)]
 clicks = [
     {"x": coord[0], "y": coord[1], "clickType": 1} for coord in point_coords
 ]
-img_height, img_width = result.original_size
+img_height, img_width = image.shape[:2]
 model_scale = {
     "height": img_height,  # original image height
     "width": img_width,  # original image width
@@ -121,9 +128,9 @@ model_scale = {
 }
 
 # Generate feeds
-feeds = model_data(clicks, result.features, model_scale)
+feeds = model_data(clicks, features, model_scale)
 
-# Run the model
+#%% Run the model
 output_names = ["masks"]
 masks = model.run(output_names, feeds)
 
@@ -220,4 +227,6 @@ def contours_to_geojson(contours):
 geojson_data = contours_to_geojson(contours)
 
 
+# %%
+features = mask_to_features(binary_mask)
 # %%
