@@ -156,6 +156,8 @@ def test_model(cache_dir: str, model_name: str, context: dict = None) -> dict:
     """
     Test the segmentation service.
     """
+    user_id = context["user"] if context else {"id": "anonymous"}
+    logger.info(f"User '{user_id}' - Test run for model '{model_name}'...")
     image = np.random.rand(1024, 1024)
     embedding = compute_image_embedding(
         cache_dir=cache_dir,
