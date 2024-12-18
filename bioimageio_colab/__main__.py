@@ -31,6 +31,12 @@ if __name__ == "__main__":
         help="Directory for caching the models",
     )
     parser.add_argument(
+        "--model_names",
+        nargs="+",
+        default=["sam_vit_b", "sam_vit_b_lm", "sam_vit_b_em_organelles"],
+        help="List of SAM model names to deploy",
+    )
+    parser.add_argument(
         "--ray_address",
         default=None,
         help="Address of the Ray cluster for running SAM",
