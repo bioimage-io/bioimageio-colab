@@ -148,7 +148,7 @@ async def test_model(handles: dict, model_name: str, context: dict = None) -> di
     assert embedding.shape == (1, 256, 64, 64)
 
     input_size = result["input_size"]
-    assert isinstance(input_size, tuple)
+    assert isinstance(input_size, list)
     assert len(input_size) == 2
 
     return {"status": "ok"}
@@ -158,6 +158,11 @@ async def register_service(args: dict) -> None:
     """
     Register the SAM annotation service on the BioImageIO Colab workspace.
     """
+    logger.info("Registering the SAM annotation service...")
+    logger.info(f"Available CPU cores: {os.cpu_count()}")
+    logger.info(f"Available GPUs: {torch.cuda.device_count()}")
+    logger.info(f"Available GPU devices: {torch.cuda.get_device_name()}")
+
     workspace_token = args.token or os.environ.get("WORKSPACE_TOKEN")
     if not workspace_token:
         raise ValueError("Workspace token is required to connect to the Hypha server.")
@@ -172,6 +177,8 @@ async def register_service(args: dict) -> None:
         }
     )
     client_id = colab_client.config["client_id"]
+    logger.info(f"Connected to workspace '{args.workspace_name}' with client ID: {client_id}")
+
     client_base_url = f"{args.server_url}/{args.workspace_name}/services/{client_id}"
     cache_dir = os.path.abspath(args.cache_dir)
 
