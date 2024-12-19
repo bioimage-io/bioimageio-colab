@@ -141,7 +141,7 @@ async def test_model(handles: dict, model_name: str, context: dict = None) -> di
     logger.info(f"User '{user_id}' - Test run for model '{model_name}'...")
 
     image = np.random.rand(1024, 1024)
-    result  = compute_image_embedding(handles, image, model_name, context)
+    result = await compute_image_embedding(handles, image, model_name, context)
 
     assert "features" in result
     assert "input_size" in result
