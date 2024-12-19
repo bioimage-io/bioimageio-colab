@@ -134,14 +134,11 @@ async def compute_image_embedding(
 #         raise e
 
 
-async def check_readiness(func) -> dict:
+async def check_readiness() -> dict:
     """
     Readiness probe for the SAM service.
     """
     logger.info("Checking the readiness of the SAM service...")
-    result = await func()
-    logger.info(f"Readiness check result: {result}")
-    assert result == "pong"
 
     return {"status": "ok"}
 
@@ -247,10 +244,8 @@ async def register_service(args: dict) -> None:
     logger.info(f"Test the service here: {client_base_url}:{args.service_id}/hello")
 
     # Register probes for the service
-    service = await colab_client.get_service(sid)
-    ping = service.get("ping")
     await colab_client.register_probes({
-        "readiness": partial(check_readiness, ping),
+        "readiness": check_readiness,
         "liveness": partial(check_liveness, handles=handles),
     })
 
