@@ -35,7 +35,7 @@ def parse_requirements(file_path) -> list:
     with open(file_path, "r") as file:
         lines = file.readlines()
     # Filter and clean package names (skip comments and empty lines)
-    skip_lines = ("#", "-r ", "ray")
+    skip_lines = ("#", "-r ")
     packages = [
         line.strip()
         for line in lines
@@ -160,8 +160,11 @@ async def register_service(args: dict) -> None:
     """
     logger.info("Registering the SAM annotation service...")
     logger.info(f"Available CPU cores: {os.cpu_count()}")
-    logger.info(f"Available GPUs: {torch.cuda.device_count()}")
-    logger.info(f"Available GPU devices: {torch.cuda.get_device_name()}")
+    if torch.cuda.is_available():
+        logger.info(f"Available GPUs: {torch.cuda.device_count()}")
+        logger.info(f"Available GPU devices: {torch.cuda.get_device_name()}")
+    else:
+        logger.info("No GPU devices available.")
 
     workspace_token = args.token or os.environ.get("WORKSPACE_TOKEN")
     if not workspace_token:
