@@ -1,0 +1,1 @@
+from .sam_image_encoder import sam_app_registry
