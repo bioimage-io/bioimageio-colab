@@ -141,13 +141,12 @@ async def test_model(handles: dict, model_name: str, context: dict = None) -> di
     logger.info(f"User '{user_id}' - Test run for model '{model_name}'...")
 
     image = np.random.rand(1024, 1024)
-    result  = await handles[model_name].remote(image)
+    result  = compute_image_embedding(handles, image, model_name, context)
 
     assert "features" in result
     assert "input_size" in result
-
-    embedding = result["features"]
-    assert isinstance(embedding, np.ndarray)
+    assert isinstance(result["features"], np.ndarray)
+    assert result["features"] is not None
 
     return {"status": "ok"}
 
