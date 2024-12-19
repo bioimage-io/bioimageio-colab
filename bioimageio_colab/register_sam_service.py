@@ -5,6 +5,7 @@ from typing import Literal
 
 import numpy as np
 import ray
+import requests
 import torch
 from dotenv import find_dotenv, load_dotenv
 from hypha_rpc import connect_to_server
@@ -49,7 +50,7 @@ def hello(context: dict = None) -> str:
 
 
 def ping(context: dict = None) -> str:
-    return {"status": "ok"}
+    return "pong"
 
 
 async def compute_image_embedding(
@@ -133,15 +134,27 @@ async def compute_image_embedding(
 #         raise e
 
 
-async def test_model(handles: dict, model_name: str, context: dict = None) -> dict:
+async def check_readiness(service_url: str) -> dict:
     """
-    Test the segmentation service.
+    Readiness probe for the SAM service.
     """
-    user_id = context["user"].get("id") if context else "anonymous"
-    logger.info(f"User '{user_id}' - Test run for model '{model_name}'...")
+    logger.info("Checking the readiness of the SAM service...")
 
-    image = np.random.rand(1024, 1024)
-    result = await compute_image_embedding(handles, image, model_name, context)
+    response = requests.get(service_url)
+    assert response.status_code == 200
+    assert response.json() == "pong"
+
+    return {"status": "ok"}
+
+
+async def check_liveness(handles: dict, model_name: str) -> dict:
+    """
+    Liveness probe for the SAM service.
+    """
+    logger.info(f"Checking the liveness of the SAM service (model: '{model_name}')...")
+
+    image = np.random.rand(256, 256)
+    result = await compute_image_embedding(handles, image, model_name)
 
     assert "features" in result
     assert "input_size" in result
@@ -177,9 +190,10 @@ async def register_service(args: dict) -> None:
         }
     )
     client_id = colab_client.config["client_id"]
-    logger.info(f"Connected to workspace '{args.workspace_name}' with client ID: {client_id}")
+    workspace = colab_client.config["workspace"]
+    logger.info(f"Connected to workspace '{workspace}' with client ID: {client_id}")
 
-    client_base_url = f"{args.server_url}/{args.workspace_name}/services/{client_id}"
+    client_base_url = f"{args.server_url}/{workspace}/services/{client_id}"
     cache_dir = os.path.abspath(args.cache_dir)
 
     if args.ray_address:
@@ -225,13 +239,24 @@ async def register_service(args: dict) -> None:
             "hello": hello,
             "ping": ping,
             "compute_embedding": partial(compute_image_embedding, handles),
-            # "compute_mask": compute_mask_function,
-            "test_model": partial(test_model, handles),
+            # "compute_mask": partial(compute_mask_function, handles),
         }
     )
+
     sid = service_info["id"]
     logger.info(f"Service registered with ID: {sid}")
     logger.info(f"Test the service here: {client_base_url}:{args.service_id}/hello")
+
+    # Register probes for the service
+    service_url = f"{client_base_url}:{args.service_id}/ping"
+    await colab_client.register_probes({
+        "readiness": partial(check_readiness, service_url),
+        "liveness": partial(check_liveness, handles=handles),
+    })
+
+    # This will register probes service where you can accessed via hypha or the HTTP proxy
+    print(f"Probes registered at workspace: {workspace}")
+    print(f"Test the liveness probe here: {args.server_url}/{workspace}/services/probes/liveness?model_name=sam_vit_b_lm")
 
 
 if __name__ == "__main__":
@@ -242,7 +267,6 @@ if __name__ == "__main__":
         cache_dir=cache_dir,
         model_name=model_name,
         image=np.random.rand(1024, 1024),
-        context={"user": {"id": "test"}},
     )
     # mask = compute_mask(
     #     cache_dir=cache_dir,

@@ -38,7 +38,7 @@ def test_service_is_running_http_api():
     service_url = f"{SERVER_URL}/{WORKSPACE_NAME}/services/{SERVICE_ID}/ping"
     response = requests.get(service_url)
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == "pong"
 
 
 def test_service_python_api():
