@@ -89,10 +89,9 @@ const loadExampleImage = async (imageID) => {
         'https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image.png',
         'https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image.png',
     ];
-    const exampleImageUrl = imageUrls[imageID];
-    console.log('Downloading image from:', exampleImageUrl);
+    console.log('Downloading image from:', imageUrls[imageID]);
 
-    const response = await fetch(exampleImageUrl);
+    const response = await fetch(imageUrls[imageID]));
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
