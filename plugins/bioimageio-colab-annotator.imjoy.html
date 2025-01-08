@@ -90,6 +90,7 @@ const loadExampleImage = async (imageID) => {
         'https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image.png',
     ];
     const exampleImageUrl = imageUrls[imageID];
+    console.log('Downloading image from:', exampleImageUrl);
 
     const response = await fetch(exampleImageUrl);
 
