@@ -67,10 +67,10 @@ const extractConfig = (ctx) => {
     }
   }
 
-  if (!config.annotation_service_id) {
-    console.log("No annotation service ID provided in the configuration. Using example image.");
-    api.alert("No annotation service ID provided in the configuration. Using example image.");
-  }
+  // if (!config.annotation_service_id) {
+  //   console.log("No annotation service ID provided in the configuration. Using example image.");
+  //   api.alert("No annotation service ID provided in the configuration. Using example image.");
+  // }
 
   return {
     serverUrl: config.server_url,
@@ -84,7 +84,7 @@ const extractConfig = (ctx) => {
     
 const loadExampleImage = async (imageID) => {
   try {
-    // Fetch the image from the provided URL
+    // TODO other URL locations for our example images
     const imageUrls = [
         'https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image.png',
         'https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image.png',
@@ -134,9 +134,13 @@ const loadExampleImage = async (imageID) => {
   }
 };
     
-const downloadExampleEmbedding = async () => {
-  const embeddingUrl = "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/client-side-decoder-cp/data/emebddings_vit_b_lm.bin";
-  // const embeddingUrl = "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/bioimageio_colab/example_image_embeddings.bin";
+const downloadExampleEmbedding = async (imageID) => {
+  // TODO update the locations
+  const embeddingUrls = [
+      "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/client-side-decoder-cp/data/emebddings_vit_b_lm.bin",
+      "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/client-side-decoder-cp/data/emebddings_vit_b_lm.bin",
+  ];
+  const embeddingUrl = embeddingUrls[imageID];
   console.log('Downloading binary embedding from:', embeddingUrl);
   
   try {
