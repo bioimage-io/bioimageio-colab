@@ -31,6 +31,7 @@ const modelUrls = {
 };
     
 const loadSamDecoder = (modelName) => {
+  "use strict";
   // Check if model in localStorage
   const modelUrl = modelUrls[modelName];
   console.log('Starting to created ONNX model from', modelUrl);
@@ -48,6 +49,7 @@ const loadSamDecoder = (modelName) => {
 };
     
 const extractConfig = (ctx) => {
+  "use strict";
   // Extract configuration settings and check if they are valid
   const config = ctx.config || {};
 
@@ -83,6 +85,7 @@ const extractConfig = (ctx) => {
 
     
 const loadExampleImage = async (imageID) => {
+  "use strict";
   try {
     // TODO other URL locations for our example images
     const imageUrls = [
@@ -91,7 +94,7 @@ const loadExampleImage = async (imageID) => {
     ];
     console.log('Downloading image from:', imageUrls[imageID]);
 
-    const response = await fetch(imageUrls[imageID]));
+    const response = await fetch(imageUrls[imageID]);
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -124,7 +127,7 @@ const loadExampleImage = async (imageID) => {
       _rshape: [canvas.height, canvas.width, 4], // RGBA format (4 channels)
       _rdtype: "uint8" // Data type for the pixel values
     };
-    const fileName = 'example_image.tif'
+    const fileName = 'example_image.tif';
 
     console.log('Example image loaded into ndarray format');
     return [ image, fileName ];
@@ -135,16 +138,17 @@ const loadExampleImage = async (imageID) => {
 };
     
 const downloadExampleEmbedding = async (imageID) => {
+  "use strict";
+
   // TODO update the locations
   const embeddingUrls = [
       "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/client-side-decoder-cp/data/emebddings_vit_b_lm.bin",
       "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/client-side-decoder-cp/data/emebddings_vit_b_lm.bin",
   ];
-  const embeddingUrl = embeddingUrls[imageID];
-  console.log('Downloading binary embedding from:', embeddingUrl);
+  console.log('Downloading binary embedding from:', embeddingUrls[imageID]);
   
   try {
-    const response = await fetch(embeddingUrl);
+    const response = await fetch(embeddingUrls[imageID]);
     if (!response.ok) {
       throw new Error('Failed to fetch the embedding.');
     }
@@ -158,11 +162,12 @@ const downloadExampleEmbedding = async (imageID) => {
 };
     
 const loadBinaryTensor = async (binaryEmbedding, embeddingShape) => {
+  "use strict";
   try {
     const dst = new ArrayBuffer(binaryEmbedding.byteLength);
     new Uint8Array(dst).set(new Uint8Array(binaryEmbedding));
     const b = new Float32Array(dst);
-    const dType = "float32"
+    const dType = "float32";
     const featureTensor = new ort.Tensor(dType, b, embeddingShape);
     console.log('Tensor successfully created.');
     return featureTensor;
@@ -173,6 +178,7 @@ const loadBinaryTensor = async (binaryEmbedding, embeddingShape) => {
 };
     
 const loadExampleEmbedding = async () => {
+  "use strict";
   const embeddingShape = [1, 256, 64, 64];
   console.log('Starting to load example image embedding...');
 
@@ -187,18 +193,19 @@ const loadExampleEmbedding = async () => {
       console.error('An error occurred while preparing the embedding:', error);
       throw error; // Propagate the error
     });
-  return embeddingPromise
+  return embeddingPromise;
 };
 
 const setModelScale = (image) => {
-  console.log("Calculating model scale")
+  "use strict";
+  console.log("Calculating model scale");
   const LONG_SIDE_LENGTH = 1024;
   const w = image._rshape[0];
   const h = image._rshape[1];
   const samScale = LONG_SIDE_LENGTH / Math.max(h, w);
   const modelScale = { height: h, width: w, samScale };
-  console.log("Set model scale to:", modelScale)
-  return modelScale
+  console.log("Set model scale to:", modelScale);
+  return modelScale;
 };
     
 const setModelData = ({ clicks, embeddings, modelScale }) => {
@@ -239,8 +246,9 @@ const setModelData = ({ clicks, embeddings, modelScale }) => {
     modelScale.width,
   ]);
 
-  if (pointCoordsTensor === undefined || pointLabelsTensor === undefined)
+  if (pointCoordsTensor === undefined || pointLabelsTensor === undefined) {
     return;
+  }
 
   // There is no previous mask, so default to an empty tensor
   const maskInput = new ort.Tensor(
@@ -383,7 +391,7 @@ class BioImageIOColabAnnotator {
             this.imageLayer = await viewer.view_image(this.image, { name: "image" });
             
             // Set the model scale
-            modelScale = setModelScale(this.image)
+            modelScale = setModelScale(this.image);
             
             // Add the annotation functionality to the interface
             this.annotationLayer = await viewer.add_shapes([], {
@@ -406,19 +414,19 @@ class BioImageIOColabAnnotator {
                             clickType: 1
                         } ];
                         // await api.showMessage("Computing image embeddings...");
-                        const embeddings = await embeddingsPromise
+                        const embeddings = await embeddingsPromise;
                         const feeds = setModelData({
                           clicks: clicks,
                           embeddings: embeddings,
                           modelScale: modelScale
                         });
-                        console.log('===== feeds =====>', feeds)
+                        console.log('===== feeds =====>', feeds);
                         if (feeds === undefined) return;
                         
                         // Feed inputs and run
                         model = await modelPromise;
                         const results = await model.run(feeds);
-                        console.log("===== results =====>", results)
+                        console.log("===== results =====>", results);
                         
                         // Convert the mask to GeoJSON
                         const masks = results["masks"];
