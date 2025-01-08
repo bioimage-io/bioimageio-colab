@@ -87,10 +87,10 @@ const extractConfig = (ctx) => {
 const loadExampleImage = async (imageID) => {
   "use strict";
   try {
-    // TODO other URL locations for our example images
     const imageUrls = [
         'https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image.png',
-        'https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image.png',
+        'https://owncloud.gwdg.de/index.php/s/Qyuf2lTh6pmqPKS/download',
+        'https://owncloud.gwdg.de/index.php/s/DIdK429koV8pa35/download',
     ];
     console.log('Downloading image ID:', imageID);
     console.log('Downloading image from:', imageUrls[imageID]);
@@ -144,7 +144,8 @@ const downloadExampleEmbedding = async (imageID) => {
   // TODO update the locations
   const embeddingUrls = [
       "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/client-side-decoder-cp/data/emebddings_vit_b_lm.bin",
-      "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/client-side-decoder-cp/data/emebddings_vit_b_lm.bin",
+      "https://owncloud.gwdg.de/index.php/s/Yai2QQIObKIvCNB/download",
+      "https://owncloud.gwdg.de/index.php/s/fGGmglsnOiyrbBX/download",
   ];
   console.log('Downloading binary embedding from:', embeddingUrls[imageID]);
   
