@@ -462,6 +462,7 @@ class BioImageIOColabAnnotator {
         // Function to load the next image
         const nextImage = async () => {
             await getImage();
+            this.imageID++;
         };
         
         // Add a control widget with a button to load the next image
