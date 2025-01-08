@@ -178,13 +178,13 @@ const loadBinaryTensor = async (binaryEmbedding, embeddingShape) => {
   }
 };
     
-const loadExampleEmbedding = async () => {
+const loadExampleEmbedding = async (imageID) => {
   "use strict";
   const embeddingShape = [1, 256, 64, 64];
   console.log('Starting to load example image embedding...');
 
   // Return the promise directly
-  const embeddingPromise = downloadExampleEmbedding()
+  const embeddingPromise = downloadExampleEmbedding(imageID)
     .then(binaryEmbedding => loadBinaryTensor(binaryEmbedding, embeddingShape))
     .then(featureTensor => {
       console.log('Example embedding has been successfully downloaded and prepared.');
