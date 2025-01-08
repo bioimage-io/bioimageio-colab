@@ -80,59 +80,17 @@ const extractConfig = (ctx) => {
     samServiceId: "bioimageio-colab/microsam"
   };
 };
+
     
-const getServices = async (config) => {
-  let imageService = null;
-  let samService = null;
-
-  if (config.imageProviderId) {
-    // Connect to the Hypha server
-    console.log(`Connecting to server ${config.serverUrl}...`);
-    await api.showMessage(`Connecting to server ${config.serverUrl}...`);
-
-    // Connect to the server
-    const server = await hyphaWebsocketClient.connectToServer({
-      server_url: config.serverUrl,
-      workspace: config.workspace,
-      token: config.token,
-    });
-
-    // Get the current workspace and user ID
-    const currentWorkspace = server.config.user.scope.current_workspace;
-    const userID = server.config.user.id;
-    console.log(`Connected to workspace ${currentWorkspace} as user ${userID}.`);
-
-    // Get the image provider service from the server
-    try {
-      imageService = await server.getService(config.imageProviderId);
-    } catch (e) {
-      console.error(e);
-      await api.alert(
-        `The image provider cannot be reached (ID: ${config.imageProviderId}). Please check if the service is running.`
-      );
-    }
-
-    // Get the SAM service from the server
-    try {
-      samService = await server.getService(config.samServiceId, { mode: "random" });
-    } catch (e) {
-      samService = null;
-      console.error(e);
-      await api.alert(
-        `The SAM service is currently not reachable (ID: ${config.samServiceId}). Please wait a few minutes and reload the page to try again.`,
-        { duration: 6000 }
-      );
-    }
-  }
-
-  // Return the services
-  return [ imageService, samService ];
-};
-    
-const loadExampleImage = async () => {
+const loadExampleImage = async (imageID) => {
   try {
     // Fetch the image from the provided URL
-    const exampleImageUrl = 'https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image.png';
+    const imageUrl = [
+        'https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image.png',
+        'https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image.png',
+    ];
+    const exampleImageUrl = imageUrls[imageID];
+
     const response = await fetch(exampleImageUrl);
 
     if (!response.ok) {
@@ -380,6 +338,7 @@ class BioImageIOColabAnnotator {
         this.annotationLayer = null; // Layer displaying the annotations
         this.edgeColor = "magenta"; // Default edge color for annotations
         this.modelName = "vit_b_lm"; // Model name for the embeddings
+        this.imageID = 0; // The id of the image to load.
     }
 
     async setup() {
@@ -396,9 +355,6 @@ class BioImageIOColabAnnotator {
         // Start loading the model
         const modelPromise = loadSamDecoder(this.modelName);
         
-        // Get the services
-        const [ imageService, samService ] = await getServices(config);
-        
         let embeddingsPromise;
         let modelScale;
         let model;
@@ -414,34 +370,10 @@ class BioImageIOColabAnnotator {
             // Reset previous embedding
             embeddingsPromise = null;
 
-            if (imageService) {
-              // Fetch a random image from the service
-              [this.image, this.filename] = await imageService.get_random_image();
+            [this.image, this.filename] = await loadExampleImage();
 
-              if (samService) {
-                // Create a promise for the embedding calculation, to be awaited later
-                embeddingsPromise = samService.compute_embedding(this.modelName, this.image)
-                  .then(result => {
-                    // Load the binary tensor using the result features
-                    return loadBinaryTensor(result.features._rvalue, result.features._rshape);
-                  })
-                  .then(featureTensor => {
-                    console.log('Image embedding has been successfully calculated and prepared.');
-                    return featureTensor; // Return the tensor for use later
-                  })
-                  .catch(error => {
-                    // Catch any errors during the embedding calculation or tensor preparation
-                    console.error('An error occurred while preparing the embedding:', error);
-                    throw error; // Propagate the error to be handled later
-                  });
-                }
-              } else {
-                // Load example image if image service is null
-                [this.image, this.filename] = await loadExampleImage();
-
-                // Create a promise for the example embedding calculation, to be awaited later
-                embeddingsPromise = loadExampleEmbedding();
-              }
+            // Create a promise for the example embedding calculation, to be awaited later
+            embeddingsPromise = loadExampleEmbedding();
             
             // Display the image immediately
             this.imageLayer = await viewer.view_image(this.image, { name: "image" });
@@ -508,24 +440,13 @@ class BioImageIOColabAnnotator {
                     }
                 }
             });
-        };
-        
-        // Function to save the annotation
-        const saveAnnotation = async () => {
-            if (!this.annotationLayer) return;
-            if (!imageService) return;
-            const annotation = await this.annotationLayer.get_features();
-            if (annotation.features.length > 0) {
-                await imageService.save_annotation(this.filename, annotation, [this.image._rshape[0], this.image._rshape[1]]);
-                await api.showMessage("Annotation saved.");
-            } else {
-                await api.showMessage("No annotation provided. Saving was skipped.");
-            }
+            
+            this.imageId = this.ImageID + 1;
+            // TODO wrap around if we are at the max image id
         };
         
         // Function to load the next image
         const nextImage = async () => {
-            await saveAnnotation();
             await getImage();
         };
         
@@ -537,7 +458,7 @@ class BioImageIOColabAnnotator {
             elements: [
                 {
                     type: "button",
-                    label: "Save Annotation",
+                    label: "Next Image",
                     callback: nextImage,
                 }
             ],
