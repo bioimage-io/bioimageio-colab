@@ -25,8 +25,9 @@
 <script lang="javascript">
 const modelUrls = {
   // "vit_b": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",  // TODO: Replace with ONNX decoder model
-  "vit_b_lm": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/sam-vit_b_lm-decoder/1/model.onnx",
+  // "vit_b_lm": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/sam-vit_b_lm-decoder/1/model.onnx",
   // "vit_b_em_organelles": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/noisy-ox/1/files/vit_b.pt",  // TODO: Replace with ONNX decoder model
+  "vit_b_lm": "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/client-side-decoder-cp/data/sam_onnx_quantized_example.onnx",
 };
     
 const loadSamDecoder = (modelName) => {
