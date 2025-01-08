@@ -383,10 +383,10 @@ class BioImageIOColabAnnotator {
             // Reset previous embedding
             embeddingsPromise = null;
 
-            [this.image, this.filename] = await loadExampleImage();
+            [this.image, this.filename] = await loadExampleImage(this.imageID);
 
             // Create a promise for the example embedding calculation, to be awaited later
-            embeddingsPromise = loadExampleEmbedding();
+            embeddingsPromise = loadExampleEmbedding(this.imageID);
             
             // Display the image immediately
             this.imageLayer = await viewer.view_image(this.image, { name: "image" });
