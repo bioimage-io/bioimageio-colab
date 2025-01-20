@@ -1,1 +1,1 @@
-from .sam_image_encoder import sam_app_registry
+from .sam_deployment import SamDeployment, SAM_MODELS
