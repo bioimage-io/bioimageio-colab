@@ -27,19 +27,25 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--cache_dir",
-        default="./.model_cache",
+        default="/tmp/ray/.model_cache",
         help="Directory for caching the models",
-    )
-    parser.add_argument(
-        "--model_names",
-        nargs="+",
-        default=["sam_vit_b", "sam_vit_b_lm", "sam_vit_b_em_organelles"],
-        help="List of SAM model names to deploy",
     )
     parser.add_argument(
         "--ray_address",
         default=None,
         help="Address of the Ray cluster for running SAM",
+    )
+    parser.add_argument(
+        "--skip_test_runs",
+        default=False,
+        action="store_true",
+        help="Skip test run of each model",
+    )
+    parser.add_argument(
+        "--require_login",
+        default=False,
+        action="store_true",
+        help="Require login to access the function `compute_image_embedding`",
     )
     args = parser.parse_args()
 

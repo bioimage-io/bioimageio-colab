@@ -1,23 +1,24 @@
 import logging
 import os
+from datetime import datetime, timezone
 from functools import partial
-from typing import Literal
 
 import numpy as np
 import ray
-import requests
 import torch
 from dotenv import find_dotenv, load_dotenv
 from hypha_rpc import connect_to_server
+from hypha_rpc.rpc import RemoteService
 from kaibu_utils import mask_to_features
+from ray.serve.config import AutoscalingConfig
+from tifffile import imread
 
-from bioimageio_colab.models import sam_app_registry
+from bioimageio_colab.models import SAM_MODELS, SamDeployment
 
 # Load environment variables
 ENV_FILE = find_dotenv()
 if ENV_FILE:
     load_dotenv(ENV_FILE)
-
 
 logger = logging.getLogger(__name__)
 logger.setLevel("INFO")
@@ -30,6 +31,9 @@ formatter = logging.Formatter(
 )
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
+
+# Set the base directory
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def parse_requirements(file_path) -> list:
@@ -45,6 +49,84 @@ def parse_requirements(file_path) -> list:
     return packages
 
 
+def connect_to_ray(address: str = None) -> None:
+    if address:
+        # Create runtime environment
+        base_requirements = parse_requirements(
+            os.path.join(BASE_DIR, "requirements.txt")
+        )
+        sam_requirements = parse_requirements(
+            os.path.join(BASE_DIR, "requirements-sam.txt")
+        )
+        runtime_env = {
+            "pip": base_requirements + sam_requirements,
+            "py_modules": [os.path.join(BASE_DIR, "bioimageio_colab")],
+        }
+    else:
+        runtime_env = None
+
+    # Check if Ray is already initialized
+    if ray.is_initialized():
+        # Disconnect previous client
+        ray.shutdown()
+
+    # Connect to Ray
+    ray.init(address=address, runtime_env=runtime_env)
+    logger.info(f"Successfully connected to Ray (version: {ray.__version__})")
+
+
+async def deploy_to_ray(
+    cache_dir: str,
+    app_name: str = "SAM Image Encoder",
+    min_replicas: int = 1,
+    max_replicas: int = 2,
+    skip_test_runs: bool = False,
+) -> None:
+    """
+    Deploy the SAM image encoders to Ray Serve.
+
+    Args:
+        models (list): List of SAM models to deploy.
+    Returns:
+        dict: Handles to the deployed image encoders.
+    """
+    # Set autoscaling configuration
+    autoscaling_config = AutoscalingConfig(
+        min_replicas=min_replicas,
+        max_replicas=max_replicas,
+    )
+
+    # Create a new Ray Serve deployment
+    deployment = SamDeployment.options(
+        autoscaling_config=autoscaling_config,
+    )
+
+    # Bind the arguments to the deployment and return an Application.
+    app = deployment.bind(cache_dir=cache_dir)
+
+    # Check if the application is already deployed
+    serve_status = ray.serve.status()
+    applications = serve_status.applications
+
+    if app_name in applications:
+        # Delete the existing application
+        ray.serve.delete(app_name)
+        logger.info(f"Deleted existing application '{app_name}'")
+
+    # Deploy the application
+    ray.serve.run(app, name=app_name, route_prefix=None)
+    logger.info(f"Deployed application '{app_name}'.")
+
+    if not skip_test_runs:
+        # Test run each model
+        handle = ray.serve.get_app_handle(name=app_name)
+        img_file = os.path.join(BASE_DIR, "data/example_image.tif")
+        image = imread(img_file)
+        for model_id in SAM_MODELS.keys():
+            await handle.remote(model_id=model_id, array=image)
+            logger.info(f"Test run for model '{model_id}' completed successfully.")
+
+
 def hello(context: dict = None) -> str:
     return "Welcome to the Interactive Segmentation service!"
 
@@ -54,27 +136,33 @@ def ping(context: dict = None) -> str:
 
 
 async def compute_image_embedding(
-    handles: dict,
+    app_name: str,
     image: np.ndarray,
     model_name: str,
+    require_login: bool = False,
     context: dict = None,
 ) -> dict:
     """
     Compute the embeddings of an image using the specified model.
     """
     try:
-        user_id = context["user"].get("id") if context else "anonymous"
+        user = context["user"]
+        if require_login and user["is_anonymous"]:
+            raise PermissionError("You must be logged in to use this service.")
+
+        user_id = user["id"]
         logger.info(
             f"User '{user_id}' - Computing embedding (model: '{model_name}')..."
         )
 
         # Compute the embedding
         # Returns: {"features": embedding, "input_size": input_size}
-        result = await handles[model_name].remote(image)
+        handle = ray.serve.get_app_handle(name=app_name)
+        result = await handle.remote(model_id=model_name, array=image)
 
         logger.info(f"User '{user_id}' - Embedding computed successfully.")
 
-        return result  
+        return result
     except Exception as e:
         logger.error(f"User '{user_id}' - Error computing embedding: {e}")
         raise e
@@ -88,6 +176,7 @@ async def compute_image_embedding(
 #     point_coords: np.ndarray,
 #     point_labels: np.ndarray,
 #     format: Literal["mask", "kaibu"] = "mask",
+#     require_login: bool = False,
 #     context: dict = None,
 # ) -> np.ndarray:
 #     """
@@ -134,30 +223,97 @@ async def compute_image_embedding(
 #         raise e
 
 
-async def check_readiness() -> dict:
+async def check_readiness(client: RemoteService, service_id: str) -> dict:
     """
     Readiness probe for the SAM service.
     """
     logger.info("Checking the readiness of the SAM service...")
 
-    return {"status": "ok"}
+    services = await client.list_services()
+    service_found = False
+    for service in services:
+        if service["id"] == service_id:
+            service_found = True
+            break
+    assert service_found, f"Service with ID '{service_id}' not found."
+
+    logger.info(f"Service with ID '{service_id}' is ready.")
+
+    return {"status": "ready"}
 
 
-async def check_liveness(handles: dict, model_name: str) -> dict:
+def format_time(last_deployed_time_s, tz: timezone = timezone.utc) -> str:
+    # Get the current time
+    current_time = datetime.now(tz)
+    last_deployed_time = datetime.fromtimestamp(last_deployed_time_s, tz)
+
+    # Calculate the duration since the last deployment
+    duration = current_time - last_deployed_time
+
+    # Break down the duration into days, hours, minutes, and seconds
+    days = duration.days
+    seconds = duration.seconds
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    remaining_seconds = seconds % 60
+
+    # Build the duration string
+    duration_parts = []
+    if days > 0:
+        duration_parts.append(f"{days}d")
+    if hours > 0:
+        duration_parts.append(f"{hours}h")
+    if minutes > 0:
+        duration_parts.append(f"{minutes}m")
+    if remaining_seconds > 0:
+        duration_parts.append(f"{remaining_seconds}s")
+
+    duration_str = " ".join(duration_parts)
+
+    return {
+        "last_deployed_at": last_deployed_time.strftime("%Y/%m/%d %H:%M:%S"),
+        "duration_since": duration_str,
+    }
+
+
+async def check_liveness(app_name: str, client: RemoteService, service_id: str) -> dict:
     """
     Liveness probe for the SAM service.
     """
-    logger.info(f"Checking the liveness of the SAM service (model: '{model_name}')...")
+    logger.info(f"Checking the liveness of the SAM service...")
+    output = {}
 
-    image = np.random.rand(256, 256)
-    result = await compute_image_embedding(handles, image, model_name)
+    # Check the Ray Serve application status
+    serve_status = ray.serve.status()
+    application = serve_status.applications[app_name]
+    assert application.status == "RUNNING"
+    formatted_time = format_time(application.last_deployed_time_s)
+    output[f"application: {app_name}"] = {
+        "status": application.status.value,
+        "last_deployed_at": formatted_time["last_deployed_at"],
+        "duration_since": formatted_time["duration_since"],
+    }
 
-    assert "features" in result
-    assert "input_size" in result
-    assert isinstance(result["features"], np.ndarray)
-    assert result["features"] is not None
+    for name, deployment in serve_status.applications[app_name].deployments.items():
+        assert deployment.status == "HEALTHY"
+        # assert deployment.replica_states == {"RUNNING": 1}
+        output[f"application: {app_name}"][f"deployment: {name}"] = {
+            "status": deployment.status.value,
+            # "replica_states": deployment.replica_states,
+        }
 
-    return {"status": "ok"}
+    # Check if the service can be accessed
+    service = await client.get_service(service_id)
+    assert await service.ping() == "pong"
+
+    output["service"] = {
+        "status": "RUNNING",
+        "service_id": service_id,
+    }
+
+    logger.info(f"Service with ID '{service_id}' is live.")
+
+    return output
 
 
 async def register_service(args: dict) -> None:
@@ -177,65 +333,54 @@ async def register_service(args: dict) -> None:
         raise ValueError("Workspace token is required to connect to the Hypha server.")
 
     # Connect to the workspace (with random client ID)
-    colab_client = await connect_to_server(
+    client = await connect_to_server(
         {
             "server_url": args.server_url,
             "workspace": args.workspace_name,
             "name": "SAM Server",
             "token": workspace_token,
+            "ping_interval": None,  # For long-running services (hypha>=0.20.47)
         }
     )
-    client_id = colab_client.config["client_id"]
-    workspace = colab_client.config["workspace"]
+    client_id = client.config["client_id"]
+    workspace = client.config["workspace"]
+    client_base_url = f"{args.server_url}/{workspace}/services/{client_id}"
     logger.info(f"Connected to workspace '{workspace}' with client ID: {client_id}")
 
-    client_base_url = f"{args.server_url}/{workspace}/services/{client_id}"
+    # Connect client to Ray
+    connect_to_ray(address=args.ray_address)
+
+    # Deploy SAM image encoders
     cache_dir = os.path.abspath(args.cache_dir)
-
-    if args.ray_address:
-        # Create runtime environment
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        base_requirements = parse_requirements(
-            os.path.join(base_dir, "requirements.txt")
-        )
-        sam_requirements = parse_requirements(
-            os.path.join(base_dir, "requirements-sam.txt")
-        )
-        runtime_env = {
-            "pip": base_requirements + sam_requirements,
-            "py_modules": [os.path.join(base_dir, "bioimageio_colab")],
-        }
-    else:
-        runtime_env = None
-
-    # Connect to Ray
-    ray.init(address=args.ray_address, runtime_env=runtime_env)
-    logger.info(f"Successfully connected to Ray (version: {ray.__version__})")
-
-    # Deploy SAM image encoder
-    handles = {}
-    for model_name, deployment in sam_app_registry.items():
-        if model_name not in list(args.model_names):
-            continue
-        app = deployment(cache_dir=cache_dir)
-        handles[model_name] = ray.serve.run(app, name="SAM Image Encoder", route_prefix=None)
-        logger.info(f"Deployed SAM image encoder for model '{model_name}'")
+    app_name = "SAM Image Encoder"
+    await deploy_to_ray(
+        cache_dir=cache_dir,
+        app_name=app_name,
+        skip_test_runs=args.skip_test_runs,
+    )
 
     # Register a new service
-    service_info = await colab_client.register_service(
+    service_info = await client.register_service(
         {
             "name": "Interactive Segmentation",
             "id": args.service_id,
             "config": {
                 "visibility": "public",
-                "require_context": True,  # TODO: only allow the service to be called by logged-in users
+                "require_context": True,
                 "run_in_executor": False,
             },
             # Exposed functions:
             "hello": hello,
             "ping": ping,
-            "compute_embedding": partial(compute_image_embedding, handles),
-            # "compute_mask": partial(compute_mask_function, handles),
+            "compute_embedding": partial(
+                compute_image_embedding,
+                app_name=app_name,
+                require_login=args.require_login,
+            ),
+            # "compute_mask": partial(
+            #     compute_mask,
+            #     require_login=args.require_login
+            # ),
         }
     )
 
@@ -244,43 +389,24 @@ async def register_service(args: dict) -> None:
     logger.info(f"Test the service here: {client_base_url}:{args.service_id}/hello")
 
     # Register probes for the service
-    await colab_client.register_probes({
-        "readiness": check_readiness,
-        "liveness": partial(check_liveness, handles=handles),
-    })
+    await client.register_probes(
+        {
+            "readiness": partial(
+                check_readiness,
+                client=client,
+                service_id=sid,
+            ),
+            "liveness": partial(
+                check_liveness,
+                app_name=app_name,
+                client=client,
+                service_id=sid,
+            ),
+        }
+    )
 
     # This will register probes service where you can accessed via hypha or the HTTP proxy
     print(f"Probes registered at workspace: {workspace}")
-    print(f"Test the liveness probe here: {args.server_url}/{workspace}/services/probes/liveness?model_name=sam_vit_b_lm")
-
-
-if __name__ == "__main__":
-    model_name = "vit_b_lm"
-    cache_dir = "./model_cache"
-
-    embedding = compute_image_embedding(
-        cache_dir=cache_dir,
-        model_name=model_name,
-        image=np.random.rand(1024, 1024),
+    print(
+        f"Test the liveness probe here: {args.server_url}/{workspace}/services/probes/liveness"
     )
-    # mask = compute_mask(
-    #     cache_dir=cache_dir,
-    #     model_name="vit_b_lm",
-    #     embedding=embedding,
-    #     image_size=(1024, 1024),
-    #     point_coords=np.array([[10, 10]]),
-    #     point_labels=np.array([1]),
-    #     format="kaibu",
-    #     context={"user": {"id": "test"}},
-    # )
-
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    base_requirements = parse_requirements(os.path.join(base_dir, "requirements.txt"))
-    sam_requirements = parse_requirements(
-        os.path.join(base_dir, "requirements-sam.txt")
-    )
-    runtime_env = {
-        "pip": base_requirements + sam_requirements,
-        "py_modules": [os.path.join(base_dir, "bioimageio_colab")],
-    }
-    print(runtime_env)
