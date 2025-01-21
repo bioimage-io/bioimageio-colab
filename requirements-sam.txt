@@ -1,5 +1,5 @@
 aiohttp==3.11.11
-numpy==1.26.4
+numpy==2.2.2
 ray[client,serve]==2.33.0
 segment_anything==1.0
 torch==2.3.1
