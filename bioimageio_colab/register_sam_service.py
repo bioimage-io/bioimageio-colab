@@ -131,7 +131,7 @@ def ping(context: dict = None) -> str:
 async def compute_image_embedding(
     app_name: str,
     image: np.ndarray,
-    model_name: str,
+    model_id: str,
     require_login: bool = False,
     context: dict = None,
 ) -> dict:
@@ -145,13 +145,13 @@ async def compute_image_embedding(
 
         user_id = user["id"]
         logger.info(
-            f"User '{user_id}' - Computing embedding (model: '{model_name}')..."
+            f"User '{user_id}' - Computing embedding (model: '{model_id}')..."
         )
 
         # Compute the embedding
         # Returns: {"features": embedding, "input_size": input_size}
         handle = ray.serve.get_app_handle(name=app_name)
-        result = await handle.remote(model_id=model_name, array=image)
+        result = await handle.remote(model_id=model_id, array=image)
 
         logger.info(f"User '{user_id}' - Embedding computed successfully.")
 
@@ -163,7 +163,7 @@ async def compute_image_embedding(
 
 # def compute_mask(
 #     cache_dir: str,
-#     model_name: str,
+#     model_id: str,
 #     embedding: np.ndarray,
 #     image_size: tuple,
 #     point_coords: np.ndarray,
@@ -177,14 +177,14 @@ async def compute_image_embedding(
 #     """
 #     try:
 #         user_id = context["user"].get("id") if context else "anonymous"
-#         logger.info(f"User '{user_id}' - Segmenting image (model: '{model_name}')...")
+#         logger.info(f"User '{user_id}' - Segmenting image (model: '{model_id}')...")
 
 #         if not format in ["mask", "kaibu"]:
 #             raise ValueError("Invalid format. Please choose either 'mask' or 'kaibu'.")
 
 #         # Load the model
 #         sam_predictor = load_model_from_ckpt(
-#             model_name=model_name,
+#             model_id=model_id,
 #             cache_dir=cache_dir,
 #         )
 

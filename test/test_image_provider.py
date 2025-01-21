@@ -2,17 +2,16 @@ import os
 import sys
 
 import numpy as np
+# from kaibu_utils import mask_to_features
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from kaibu_utils import mask_to_features
-
 from docs.data_providing_service import get_random_image, save_annotation
 
 
 def test_load_image():
     supported_file_types = ("tif", "tiff")
     image, image_name = get_random_image(
-        image_folder="./bioimageio_colab/",
+        image_folder="./data/",
         supported_file_types=supported_file_types,
     )
     assert image is not None
