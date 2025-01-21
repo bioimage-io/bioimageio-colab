@@ -348,6 +348,7 @@ class BioImageIOColabAnnotator {
         this.edgeColor = "magenta"; // Default edge color for annotations
         this.modelName = "vit_b_lm"; // Model name for the embeddings
         this.imageID = 0; // The id of the image to load.
+        this.nImages = 2;
     }
 
     async setup() {
@@ -449,15 +450,17 @@ class BioImageIOColabAnnotator {
                     }
                 }
             });
-            
-            this.imageId = this.ImageID + 1;
-            // TODO wrap around if we are at the max image id
         };
         
         // Function to load the next image
         const nextImage = async () => {
             await getImage();
-            this.imageID++;
+            // TODO wrap around
+            this.imageID = this.imageID + 1;
+            if(this.imageID >= this.nImages) {
+                this.imageID = 0;
+            }
+            console.log("Increased the image id to", this.imageID);
         };
         
         // Add a control widget with a button to load the next image
