@@ -30,7 +30,7 @@ COPY ./requirements-sam.txt /app/requirements-sam.txt
 # Install the required packages to register the service
 RUN pip install -r /app/requirements.txt
 
-# Copy the python script and data to the docker environment
+# Copy the python module and data to the docker environment
 COPY ./bioimageio_colab /app/bioimageio_colab
 COPY ./data /app/data
 

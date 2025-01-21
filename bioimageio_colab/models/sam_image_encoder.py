@@ -1,15 +1,16 @@
 from typing import Literal
 
 import numpy as np
-import torch
-from segment_anything import sam_model_registry
-from segment_anything.utils.transforms import ResizeLongestSide
 
 
 class SamImageEncoder:
     def __init__(
         self, model_path: str, model_architecture: Literal["vit_b", "vit_l", "vit_h"]
     ):
+        import torch
+        from segment_anything import sam_model_registry
+        from segment_anything.utils.transforms import ResizeLongestSide
+
         # Extract image encoder from checkpoint
         device = "cuda" if torch.cuda.is_available() else "cpu"
         build_sam = sam_model_registry[model_architecture]
@@ -53,7 +54,9 @@ class SamImageEncoder:
 
         return array
 
-    def _preprocess(self, array: np.array) -> torch.Tensor:
+    def _preprocess(self, array: np.array):
+        import torch
+
         # Validate image shape and dtype
         original_image = self._to_image_format(array)
 
@@ -77,7 +80,7 @@ class SamImageEncoder:
 
         return input_image_torch
 
-    def encode(self, array: np.ndarray):
+    def encode(self, array: np.ndarray) -> dict:
         """
         Encode an image using the SAM image encoder.
 
@@ -89,6 +92,8 @@ class SamImageEncoder:
                 - "features" (np.ndarray): The extracted features from the image
                 - "input_size" (tuple): The size of the input image (H, W)
         """
+        import torch
+
         # Preprocess the input image
         input_image = self._preprocess(array)
         input_size = tuple(input_image.shape[-2:])

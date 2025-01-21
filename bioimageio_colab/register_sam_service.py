@@ -49,20 +49,11 @@ def parse_requirements(file_path) -> list:
 
 
 def connect_to_ray(address: str = None) -> None:
-    if address:
-        # Create runtime environment
-        base_requirements = parse_requirements(
-            os.path.join(BASE_DIR, "requirements.txt")
-        )
-        sam_requirements = parse_requirements(
-            os.path.join(BASE_DIR, "requirements-sam.txt")
-        )
-        runtime_env = {
-            "pip": base_requirements + sam_requirements,
-            "py_modules": [os.path.join(BASE_DIR, "bioimageio_colab")],
-        }
-    else:
-        runtime_env = None
+    # Create runtime environment
+    sam_requirements = parse_requirements(
+        os.path.join(BASE_DIR, "requirements-sam.txt")
+    )
+    runtime_env = {"pip": sam_requirements}
 
     # Check if Ray is already initialized
     if ray.is_initialized():
