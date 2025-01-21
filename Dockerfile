@@ -30,11 +30,9 @@ COPY ./requirements-sam.txt /app/requirements-sam.txt
 # Install the required packages to register the service
 RUN pip install -r /app/requirements.txt
 
-# Copy the python script to the docker environment
+# Copy the python script and data to the docker environment
 COPY ./bioimageio_colab /app/bioimageio_colab
-
-# Create cache directory for models (not needed with ray)
-RUN mkdir -p /app/.model_cache
+COPY ./data /app/data
 
 # Change ownership of the application directory to the non-root user
 RUN chown -R bioimageio_colab:bioimageio_colab /app/
