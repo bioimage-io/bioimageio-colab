@@ -343,12 +343,12 @@ class BioImageIOColabAnnotator {
         this.image = null; // Current image
         this.filename = null; // Filename of the current image
         this.mask = null; // Current mask
+        this.modelPromis = null;  //
         this.imageLayer = null; // Layer displaying the image
         this.annotationLayer = null; // Layer displaying the annotations
         this.edgeColor = "magenta"; // Default edge color for annotations
-        this.modelName = "vit_b_lm"; // Model name for the embeddings
         this.imageID = 0; // The id of the image to load.
-        this.nImages = 2;
+        this.nImages = 2; // The number of images.
     }
 
     async setup() {
@@ -362,8 +362,8 @@ class BioImageIOColabAnnotator {
         // Check the configuration
         const config = await extractConfig(ctx);
         
-        // Start loading the model
-        const modelPromise = loadSamDecoder(this.modelName);
+        // Load the initial model
+        this.modelPromise = loadSamDecoder("vit_b_lm");
         
         let embeddingsPromise;
         let modelScale;
@@ -422,7 +422,7 @@ class BioImageIOColabAnnotator {
                         if (feeds === undefined) return;
                         
                         // Feed inputs and run
-                        model = await modelPromise;
+                        model = await this.modelPromise;
                         const results = await model.run(feeds);
                         console.log("===== results =====>", results);
                         
@@ -455,12 +455,12 @@ class BioImageIOColabAnnotator {
         // Function to load the next image
         const nextImage = async () => {
             await getImage();
-            // TODO wrap around
             this.imageID = this.imageID + 1;
             if(this.imageID >= this.nImages) {
                 this.imageID = 0;
             }
-            console.log("Increased the image id to", this.imageID);
+            // TODO model switching
+            console.log("Changed the image id to", this.imageID);
         };
         
         // Add a control widget with a button to load the next image
@@ -480,6 +480,7 @@ class BioImageIOColabAnnotator {
         // Load the initial image
         await getImage();
         await api.showMessage("Ready to annotate!");
+        this.imageID = this.imageID + 1;
     }
 }
 
