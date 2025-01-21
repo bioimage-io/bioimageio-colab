@@ -1,5 +1,6 @@
--r "requirements.txt"
+aiohttp==3.11.11
+numpy==1.26.4
+ray[client,serve]==2.33.0
+segment_anything==1.0
 torch==2.3.1
 torchvision==0.18.1
-segment_anything==1.0
-cachetools==5.5.0

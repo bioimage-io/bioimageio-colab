@@ -1,6 +1,11 @@
+"""
+Hypha now supports creating workspaces from the Hypha Dashboard. This script is no longer needed.
+"""
+
 import argparse
-from hypha_rpc import connect_to_server, login
 import asyncio
+
+from hypha_rpc import connect_to_server, login
 
 
 async def create_workspace_token(args):
@@ -63,6 +68,7 @@ async def create_workspace_token(args):
         print("Services in workspace:")
         for service in services:
             print(f"- {service['name']}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

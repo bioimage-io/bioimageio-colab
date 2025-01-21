@@ -12,4 +12,15 @@ services:
       "--server_url=https://hypha.aicell.io",
       "--workspace_name=bioimageio-colab",
       "--service_id=microsam",
+      "--cache_dir=/tmp/ray/.model_cache"
     ]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['2']
+              capabilities: [gpu]
+    shm_size: 10.24gb
+    volumes:
+      - /data/tmp/ray:/tmp/ray
