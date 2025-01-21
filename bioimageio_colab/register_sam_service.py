@@ -8,7 +8,7 @@ import ray
 from dotenv import find_dotenv, load_dotenv
 from hypha_rpc import connect_to_server
 from hypha_rpc.rpc import RemoteService
-from kaibu_utils import mask_to_features
+# from kaibu_utils import mask_to_features
 from ray.serve.config import AutoscalingConfig
 from tifffile import imread
 
