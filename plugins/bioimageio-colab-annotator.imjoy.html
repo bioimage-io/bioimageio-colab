@@ -395,6 +395,7 @@ const processMaskToGeoJSON = (masks) => {
   return features;
 };
 
+let localDirectoryHandle = await window.showDirectoryPicker();
     
 class BioImageIOColabAnnotator {
     constructor() {
@@ -407,7 +408,6 @@ class BioImageIOColabAnnotator {
         this.edgeColor = "magenta"; // Default edge color for annotations
         this.imageID = 0; // The id of the image to load.
         this.nImages = 3; // The number of images.
-        this.localDirectoryHandle = null;
     }
 
     async setup() {
@@ -421,12 +421,6 @@ class BioImageIOColabAnnotator {
         // Check the configuration
         const config = await extractConfig(ctx);
 
-        // Get the local directory for caching
-        try {
-            this.localDirectoryHandle = await window.showDirectoryPicker()
-            console.log("Directory selected successfully.")
-        } catch(error) {}
-        
         // Load the initial model
         this.modelPromise = loadSamDecoder("vit_b_lm");
         
@@ -445,7 +439,7 @@ class BioImageIOColabAnnotator {
             // Reset previous embedding
             embeddingsPromise = null;
 
-            [this.image, this.filename] = await loadExampleImage(this.imageID, this.localDirectoryHandle);
+            [this.image, this.filename] = await loadExampleImage(this.imageID, localDirectoryHandle);
 
             // Create a promise for the example embedding calculation, to be awaited later
             embeddingsPromise = loadExampleEmbedding(this.imageID);
@@ -517,17 +511,6 @@ class BioImageIOColabAnnotator {
             });
         };
 
-        const selectFolder = async () => {
-    		try {
-    		    localDirectoryHandle = await window.showDirectoryPicker();
-    		    console.log("Directory selected successfully.");
-    		    document.getElementById('status').textContent = "Folder selected successfully.";
-    		} catch (error) {
-    		    console.warn("Directory selection cancelled or not available.", error);
-    		    document.getElementById('status').textContent = "No folder selected.";
-    		}
-        };
-        
         // Function to load the next image
         const nextImage = async () => {
             await getImage();
@@ -560,11 +543,6 @@ class BioImageIOColabAnnotator {
                     label: "Next Image",
                     callback: nextImage,
                 },
-                {
-                    type: "button",
-                    label: "Select Folder",
-                    callback: selectFolder,
-                }
             ],
         });
 
