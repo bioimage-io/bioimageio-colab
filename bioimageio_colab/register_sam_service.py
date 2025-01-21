@@ -394,7 +394,7 @@ async def register_service(args: dict) -> None:
     )
 
     # This will register probes service where you can accessed via hypha or the HTTP proxy
-    print(f"Probes registered at workspace: {workspace}")
-    print(
+    logger.info(f"Probes registered at workspace: {workspace}")
+    logger.info(
         f"Test the liveness probe here: {args.server_url}/{workspace}/services/probes/liveness"
     )
