@@ -516,6 +516,17 @@ class BioImageIOColabAnnotator {
                 }
             });
         };
+
+        const selectFolder = async () => {
+    		try {
+    		    localDirectoryHandle = await window.showDirectoryPicker();
+    		    console.log("Directory selected successfully.");
+    		    document.getElementById('status').textContent = "Folder selected successfully.";
+    		} catch (error) {
+    		    console.warn("Directory selection cancelled or not available.", error);
+    		    document.getElementById('status').textContent = "No folder selected.";
+    		}
+        };
         
         // Function to load the next image
         const nextImage = async () => {
@@ -548,6 +559,11 @@ class BioImageIOColabAnnotator {
                     type: "button",
                     label: "Next Image",
                     callback: nextImage,
+                },
+                {
+                    type: "button",
+                    label: "Select Folder",
+                    callback: selectFolder,
                 }
             ],
         });
