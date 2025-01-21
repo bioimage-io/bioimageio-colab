@@ -24,14 +24,14 @@
 
 <script lang="javascript">
 const modelUrls = {
-  // "vit_b": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",  // TODO: Replace with ONNX decoder model
-  "vit_b_lm": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/sam-vit_b_lm-decoder/1/model.onnx",
-  // "vit_b_em_organelles": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/noisy-ox/1/files/vit_b.pt",  // TODO: Replace with ONNX decoder model
+  // "sam_vit_b": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",  // TODO: Replace with ONNX decoder model
+  "sam_vit_b_lm": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/sam-vit_b_lm-decoder/1/model.onnx",
+  // "sam_vit_b_em_organelles": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/noisy-ox/1/files/vit_b.pt",  // TODO: Replace with ONNX decoder model
 };
     
-const loadSamDecoder = (modelName) => {
+const loadSamDecoder = (modelID) => {
   // Check if model in localStorage
-  const modelUrl = modelUrls[modelName];
+  const modelUrl = modelUrls[modelID];
   console.log('Starting to created ONNX model from', modelUrl);
   const modelPromise = ort.InferenceSession.create(modelUrl)
     .then((model) => {
@@ -377,7 +377,7 @@ class BioImageIOColabAnnotator {
         this.imageLayer = null; // Layer displaying the image
         this.annotationLayer = null; // Layer displaying the annotations
         this.edgeColor = "magenta"; // Default edge color for annotations
-        this.modelName = "vit_b_lm"; // Model name for the embeddings
+        this.modelID = "sam_vit_b_lm"; // Model name for the embeddings
     }
 
     async setup() {
@@ -392,7 +392,7 @@ class BioImageIOColabAnnotator {
         const config = await extractConfig(ctx);
         
         // Start loading the model
-        const modelPromise = loadSamDecoder(this.modelName);
+        const modelPromise = loadSamDecoder(this.modelID);
         
         // Get the services
         const [ imageService, samService ] = await getServices(config);
@@ -418,7 +418,7 @@ class BioImageIOColabAnnotator {
 
               if (samService) {
                 // Create a promise for the embedding calculation, to be awaited later
-                embeddingsPromise = samService.compute_embedding(this.modelName, this.image)
+                embeddingsPromise = samService.compute_embedding(this.image, this.modelID)
                   .then(result => {
                     // Load the binary tensor using the result features
                     return loadBinaryTensor(result.features._rvalue, result.features._rshape);
