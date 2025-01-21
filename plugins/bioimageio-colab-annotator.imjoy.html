@@ -131,7 +131,7 @@ const getServices = async (config) => {
 const loadExampleImage = async () => {
   try {
     // Fetch the image from the provided URL
-    const exampleImageUrl = 'https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/bioimageio_colab/example_image.png';
+    const exampleImageUrl = 'https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image.png';
     const response = await fetch(exampleImageUrl);
 
     if (!response.ok) {
@@ -176,7 +176,7 @@ const loadExampleImage = async () => {
 };
     
 const downloadExampleEmbedding = async () => {
-  const embeddingUrl = "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/bioimageio_colab/example_image_embeddings.bin";
+  const embeddingUrl = "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image_embeddings.bin";
   console.log('Downloading binary embedding from:', embeddingUrl);
   
   try {
