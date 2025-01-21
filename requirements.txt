@@ -2,4 +2,5 @@ hypha-rpc==0.20.44
 kaibu-utils==0.1.14
 numpy==1.26.4
 python-dotenv==1.0.1
-requests==2.31.0
+ray[serve]==2.33.0
+tifffile==2024.7.24

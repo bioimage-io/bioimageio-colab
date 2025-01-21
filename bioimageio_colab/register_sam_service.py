@@ -5,7 +5,6 @@ from functools import partial
 
 import numpy as np
 import ray
-import torch
 from dotenv import find_dotenv, load_dotenv
 from hypha_rpc import connect_to_server
 from hypha_rpc.rpc import RemoteService
@@ -322,11 +321,6 @@ async def register_service(args: dict) -> None:
     """
     logger.info("Registering the SAM annotation service...")
     logger.info(f"Available CPU cores: {os.cpu_count()}")
-    if torch.cuda.is_available():
-        logger.info(f"Available GPUs: {torch.cuda.device_count()}")
-        logger.info(f"Available GPU devices: {torch.cuda.get_device_name()}")
-    else:
-        logger.info("No GPU devices available.")
 
     workspace_token = args.token or os.environ.get("WORKSPACE_TOKEN")
     if not workspace_token:

@@ -1,4 +1,5 @@
--r "requirements.txt"
+aiohttp==3.11.11
+numpy==1.26.4
 ray[client]==2.33.0
 ray[serve]==2.33.0
 segment_anything==1.0
