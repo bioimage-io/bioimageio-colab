@@ -30,8 +30,9 @@ COPY ./requirements-sam.txt /app/requirements-sam.txt
 # Install the required packages for SAM
 RUN pip install -r /app/requirements-sam.txt
 
-# Copy the python script to the docker environment
+# Copy the python module and data to the docker environment
 COPY ./bioimageio_colab /app/bioimageio_colab
+COPY ./data /app/data
 
 # Create cache directory for models
 RUN mkdir -p /app/.model_cache
