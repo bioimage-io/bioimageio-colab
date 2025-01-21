@@ -1,6 +1,3 @@
-import os
-
-import aiohttp
 import numpy as np
 from ray import serve
 
@@ -33,6 +30,8 @@ class SamDeployment:
         self.models = SAM_MODELS
 
     async def _download_model(self, model_path: str, model_url: str) -> None:
+        import aiohttp
+
         async with aiohttp.ClientSession() as session:
             async with session.get(model_url) as response:
                 if response.status != 200:
@@ -43,6 +42,8 @@ class SamDeployment:
 
     @serve.multiplexed(max_num_models_per_replica=2)
     async def get_model(self, model_id: str):
+        import os
+
         model_path = os.path.join(self.cache_dir, f"{model_id}.pt")
 
         if not os.path.exists(model_path):

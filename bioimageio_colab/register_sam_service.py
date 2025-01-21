@@ -5,11 +5,10 @@ from functools import partial
 
 import numpy as np
 import ray
-import torch
 from dotenv import find_dotenv, load_dotenv
 from hypha_rpc import connect_to_server
 from hypha_rpc.rpc import RemoteService
-from kaibu_utils import mask_to_features
+# from kaibu_utils import mask_to_features
 from ray.serve.config import AutoscalingConfig
 from tifffile import imread
 
@@ -50,20 +49,14 @@ def parse_requirements(file_path) -> list:
 
 
 def connect_to_ray(address: str = None) -> None:
-    if address:
-        # Create runtime environment
-        base_requirements = parse_requirements(
-            os.path.join(BASE_DIR, "requirements.txt")
-        )
-        sam_requirements = parse_requirements(
-            os.path.join(BASE_DIR, "requirements-sam.txt")
-        )
-        runtime_env = {
-            "pip": base_requirements + sam_requirements,
-            "py_modules": [os.path.join(BASE_DIR, "bioimageio_colab")],
-        }
-    else:
-        runtime_env = None
+    # Create runtime environment
+    sam_requirements = parse_requirements(
+        os.path.join(BASE_DIR, "requirements-sam.txt")
+    )
+    runtime_env = {
+        "pip": sam_requirements,
+        "py_modules": [os.path.join(BASE_DIR, "bioimageio_colab")],
+    }
 
     # Check if Ray is already initialized
     if ray.is_initialized():
@@ -138,7 +131,7 @@ def ping(context: dict = None) -> str:
 async def compute_image_embedding(
     app_name: str,
     image: np.ndarray,
-    model_name: str,
+    model_id: str,
     require_login: bool = False,
     context: dict = None,
 ) -> dict:
@@ -152,13 +145,13 @@ async def compute_image_embedding(
 
         user_id = user["id"]
         logger.info(
-            f"User '{user_id}' - Computing embedding (model: '{model_name}')..."
+            f"User '{user_id}' - Computing embedding (model: '{model_id}')..."
         )
 
         # Compute the embedding
         # Returns: {"features": embedding, "input_size": input_size}
         handle = ray.serve.get_app_handle(name=app_name)
-        result = await handle.remote(model_id=model_name, array=image)
+        result = await handle.remote(model_id=model_id, array=image)
 
         logger.info(f"User '{user_id}' - Embedding computed successfully.")
 
@@ -170,7 +163,7 @@ async def compute_image_embedding(
 
 # def compute_mask(
 #     cache_dir: str,
-#     model_name: str,
+#     model_id: str,
 #     embedding: np.ndarray,
 #     image_size: tuple,
 #     point_coords: np.ndarray,
@@ -184,14 +177,14 @@ async def compute_image_embedding(
 #     """
 #     try:
 #         user_id = context["user"].get("id") if context else "anonymous"
-#         logger.info(f"User '{user_id}' - Segmenting image (model: '{model_name}')...")
+#         logger.info(f"User '{user_id}' - Segmenting image (model: '{model_id}')...")
 
 #         if not format in ["mask", "kaibu"]:
 #             raise ValueError("Invalid format. Please choose either 'mask' or 'kaibu'.")
 
 #         # Load the model
 #         sam_predictor = load_model_from_ckpt(
-#             model_name=model_name,
+#             model_id=model_id,
 #             cache_dir=cache_dir,
 #         )
 
@@ -322,11 +315,6 @@ async def register_service(args: dict) -> None:
     """
     logger.info("Registering the SAM annotation service...")
     logger.info(f"Available CPU cores: {os.cpu_count()}")
-    if torch.cuda.is_available():
-        logger.info(f"Available GPUs: {torch.cuda.device_count()}")
-        logger.info(f"Available GPU devices: {torch.cuda.get_device_name()}")
-    else:
-        logger.info("No GPU devices available.")
 
     workspace_token = args.token or os.environ.get("WORKSPACE_TOKEN")
     if not workspace_token:
@@ -406,7 +394,7 @@ async def register_service(args: dict) -> None:
     )
 
     # This will register probes service where you can accessed via hypha or the HTTP proxy
-    print(f"Probes registered at workspace: {workspace}")
-    print(
+    logger.info(f"Probes registered at workspace: {workspace}")
+    logger.info(
         f"Test the liveness probe here: {args.server_url}/{workspace}/services/probes/liveness"
     )

@@ -23,19 +23,16 @@ RUN echo "bioimageio_colab ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 # Upgrade pip
 RUN pip install --upgrade pip
 
-# Copy the requirements file for SAM to the docker environment
+# Copy the requirements files to the docker environment
 COPY ./requirements.txt /app/requirements.txt
 COPY ./requirements-sam.txt /app/requirements-sam.txt
 
-# Install the required packages for SAM
-RUN pip install -r /app/requirements-sam.txt
+# Install the required packages to register the service
+RUN pip install -r /app/requirements.txt
 
 # Copy the python module and data to the docker environment
 COPY ./bioimageio_colab /app/bioimageio_colab
-COPY ./data /app/data
-
-# Create cache directory for models
-RUN mkdir -p /app/.model_cache
+COPY ./data/example_image.tif /app/data/example_image.tif
 
 # Change ownership of the application directory to the non-root user
 RUN chown -R bioimageio_colab:bioimageio_colab /app/
