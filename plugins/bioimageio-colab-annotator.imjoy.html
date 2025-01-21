@@ -23,14 +23,56 @@
 </config>
 
 <script lang="javascript">
+
 const modelUrls = {
   "vit_b_lm": "https://raw.githubusercontent.com/constantinpape/mbexc-review/refs/heads/master/vit_b_lm_decoder.onnx",
   "vit_b_em": "https://raw.githubusercontent.com/constantinpape/mbexc-review/refs/heads/master/vit_b_em_decoder.onnx",
 };
+
+
+const modelNames = {
+  "vit_b_lm": "vit_b_lm_decoder.onnx",
+  "vit_b_em": "vit_b_em_decoder.onnx",
+};
+
+
+// Reusable function to load a file from local filesystem or web
+async function loadFileWithFallback(localDirectoryHandle, fileName, fallbackUrl) {
+    try {
+        // Step 1: Try to read the file from the local directory
+        if (!localDirectoryHandle) {
+            throw new Error("No local directory handle provided.");
+        }
+
+        const fileHandle = await localDirectoryHandle.getFileHandle(fileName);
+        const file = await fileHandle.getFile();
+        const fileData = await file.arrayBuffer();
+
+        console.log("Loaded from local filesystem:", fileName);
+        return fileData; // Return the binary data
+    } catch (error) {
+        console.warn("Local file not found or access denied. Falling back to web.", error);
+
+        // Step 2: Fallback to downloading the file from the web
+        try {
+            const response = await fetch(fallbackUrl);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const fileData = await response.arrayBuffer();
+            console.log("Loaded from web:", fallbackUrl);
+            return fileData; // Return the binary data
+        } catch (webError) {
+            console.error("Failed to load file from both local filesystem and web.", webError);
+            throw webError; // Rethrow the error to signal failure
+        }
+    }
+}
+
     
 const loadSamDecoder = (modelName) => {
   "use strict";
-  // Check if model in localStorage
   const modelUrl = modelUrls[modelName];
   console.log('Starting to created ONNX model from', modelUrl);
   const modelPromise = ort.InferenceSession.create(modelUrl)
@@ -45,6 +87,7 @@ const loadSamDecoder = (modelName) => {
 
   return modelPromise;
 };
+
     
 const extractConfig = (ctx) => {
   "use strict";
@@ -82,7 +125,7 @@ const extractConfig = (ctx) => {
 };
 
     
-const loadExampleImage = async (imageID) => {
+const loadExampleImage = async (imageID, localDirectoryHandle) => {
   "use strict";
   try {
     const imageUrls = [
@@ -91,10 +134,16 @@ const loadExampleImage = async (imageID) => {
         'https://raw.githubusercontent.com/constantinpape/mbexc-review/refs/heads/master/mitos-em.png',
         //'https://raw.githubusercontent.com/constantinpape/mbexc-review/refs/heads/master/vesicles-cryo.png',
     ];
+    const imageNames = [
+        'cells.png',
+        'nuclei.png',
+        'mitos-em.png',
+    ];
     console.log('Downloading image ID:', imageID);
     console.log('Downloading image from:', imageUrls[imageID]);
 
-    const response = await fetch(imageUrls[imageID]);
+    const response = await loadFileWithFallback(localDirectoryHandle, imageNames[imageID], imageUrls[imageID]);
+    // const response = await fetch(imageUrls[imageID]);
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -136,6 +185,7 @@ const loadExampleImage = async (imageID) => {
     throw error;
   }
 };
+
     
 const downloadExampleEmbedding = async (imageID) => {
   "use strict";
@@ -161,6 +211,7 @@ const downloadExampleEmbedding = async (imageID) => {
     throw error; // Rethrow error to propagate it
   }
 };
+
     
 const loadBinaryTensor = async (binaryEmbedding, embeddingShape) => {
   "use strict";
@@ -177,6 +228,7 @@ const loadBinaryTensor = async (binaryEmbedding, embeddingShape) => {
     throw error; // Rethrow error to propagate it
   }
 };
+
     
 const loadExampleEmbedding = async (imageID) => {
   "use strict";
@@ -208,6 +260,7 @@ const setModelScale = (image) => {
   console.log("Set model scale to:", modelScale);
   return modelScale;
 };
+
     
 const setModelData = ({ clicks, embeddings, modelScale }) => {
   let pointCoords;
@@ -269,6 +322,7 @@ const setModelData = ({ clicks, embeddings, modelScale }) => {
     has_mask_input: hasMaskInput,
   };
 };
+
     
 const processMaskToGeoJSON = (masks) => {
   // Dimensions of the mask (batch, channels, width, height)
@@ -353,6 +407,7 @@ class BioImageIOColabAnnotator {
         this.edgeColor = "magenta"; // Default edge color for annotations
         this.imageID = 0; // The id of the image to load.
         this.nImages = 3; // The number of images.
+        this.localDirectoryHandle = null;
     }
 
     async setup() {
@@ -365,6 +420,12 @@ class BioImageIOColabAnnotator {
         
         // Check the configuration
         const config = await extractConfig(ctx);
+
+        // Get the local directory for caching
+        try {
+            this.localDirectoryHandle = await window.showDirectoryPicker()
+            console.log("Directory selected successfully.")
+        } catch(error) {}
         
         // Load the initial model
         this.modelPromise = loadSamDecoder("vit_b_lm");
@@ -384,7 +445,7 @@ class BioImageIOColabAnnotator {
             // Reset previous embedding
             embeddingsPromise = null;
 
-            [this.image, this.filename] = await loadExampleImage(this.imageID);
+            [this.image, this.filename] = await loadExampleImage(this.imageID, this.localDirectoryHandle);
 
             // Create a promise for the example embedding calculation, to be awaited later
             embeddingsPromise = loadExampleEmbedding(this.imageID);
