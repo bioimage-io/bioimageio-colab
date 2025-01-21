@@ -24,10 +24,8 @@
 
 <script lang="javascript">
 const modelUrls = {
-  // "vit_b": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",  // TODO: Replace with ONNX decoder model
-  // "vit_b_lm": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/sam-vit_b_lm-decoder/1/model.onnx",
-  // "vit_b_em_organelles": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/noisy-ox/1/files/vit_b.pt",  // TODO: Replace with ONNX decoder model
-  "vit_b_lm": "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/client-side-decoder-cp/data/sam_onnx_quantized_example.onnx",
+  "vit_b_lm": "https://raw.githubusercontent.com/constantinpape/mbexc-review/refs/heads/master/vit_b_lm_decoder.onnx",
+  "vit_b_em": "",
 };
     
 const loadSamDecoder = (modelName) => {
@@ -88,7 +86,6 @@ const loadExampleImage = async (imageID) => {
   "use strict";
   try {
     const imageUrls = [
-        'https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image.png',
         'https://raw.githubusercontent.com/constantinpape/mbexc-review/refs/heads/master/cells.png',
         'https://raw.githubusercontent.com/constantinpape/mbexc-review/refs/heads/master/nuclei.png',
     ];
@@ -141,9 +138,7 @@ const loadExampleImage = async (imageID) => {
 const downloadExampleEmbedding = async (imageID) => {
   "use strict";
 
-  // TODO update the locations
   const embeddingUrls = [
-      "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/client-side-decoder-cp/data/emebddings_vit_b_lm.bin",
       "https://raw.githubusercontent.com/constantinpape/mbexc-review/refs/heads/master/embeddings_cells.bin",
       "https://raw.githubusercontent.com/constantinpape/mbexc-review/refs/heads/master/embeddings_nuclei.bin",
   ];
