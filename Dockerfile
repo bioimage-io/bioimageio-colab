@@ -32,7 +32,7 @@ RUN pip install -r /app/requirements.txt
 
 # Copy the python module and data to the docker environment
 COPY ./bioimageio_colab /app/bioimageio_colab
-COPY ./data /app/data
+COPY ./data/example_image.tif /app/data/example_image.tif
 
 # Change ownership of the application directory to the non-root user
 RUN chown -R bioimageio_colab:bioimageio_colab /app/
