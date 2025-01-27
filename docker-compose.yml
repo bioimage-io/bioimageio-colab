@@ -12,7 +12,9 @@ services:
       "--server_url=https://hypha.aicell.io",
       "--workspace_name=bioimageio-colab",
       "--service_id=microsam",
-      "--cache_dir=/tmp/ray/.model_cache"
+      "--cache_dir=/tmp/ray/.model_cache",
+      "--skip_test_runs",
+      "--max_concurrent_requests=3",
     ]
     deploy:
       resources:
