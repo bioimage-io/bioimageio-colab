@@ -6,12 +6,14 @@ from tifffile import imread
 SERVER_URL = "https://hypha.aicell.io"
 WORKSPACE_NAME = "bioimageio-colab"
 SERVICE_ID = "microsam"
+CLIENT_ID = "agCjG8oTEYusqGujdtwpZn"
 MODEL_IDS = ["sam_vit_b", "sam_vit_b_lm", "sam_vit_b_em_organelles"]
 IMG_PATH = "./data/example_image.tif"
 
 
 def test_service_is_alive_http_api():
-    service_url = f"{SERVER_URL}/{WORKSPACE_NAME}/services/{SERVICE_ID}"
+    client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
+    service_url = f"{SERVER_URL}/{WORKSPACE_NAME}/services/{client_str}{SERVICE_ID}"
 
     response = requests.get(f"{service_url}/hello")
     assert response.status_code == 200
@@ -23,7 +25,8 @@ def test_service_is_alive_http_api():
 
 
 def test_probes_http_api():
-    probes_url = f"{SERVER_URL}/{WORKSPACE_NAME}/services/probes"
+    client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
+    probes_url = f"{SERVER_URL}/{WORKSPACE_NAME}/services/{client_str}probes"
 
     response = requests.get(f"{probes_url}/readiness")
     assert response.status_code == 200
@@ -42,7 +45,8 @@ def test_service_python_api():
     client = connect_to_server({"server_url": SERVER_URL, "method_timeout": 5})
     assert client
 
-    sid = f"{WORKSPACE_NAME}/{SERVICE_ID}"
+    client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
+    sid = f"{WORKSPACE_NAME}/{client_str}{SERVICE_ID}"
     service = client.get_service(sid, {"mode": "random"})
     assert service.config.workspace == WORKSPACE_NAME
 
