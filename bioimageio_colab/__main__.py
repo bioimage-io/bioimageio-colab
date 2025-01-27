@@ -36,10 +36,22 @@ if __name__ == "__main__":
         help="Address of the Ray cluster for running SAM",
     )
     parser.add_argument(
+        "--restart_deployment",
+        default=False,
+        action="store_true",
+        help="Restart the Ray deployment if it already exists",
+    )
+    parser.add_argument(
         "--skip_test_runs",
         default=False,
         action="store_true",
         help="Skip test run of each model",
+    )
+    parser.add_argument(
+        "--max_concurrent_requests",
+        default=10,
+        type=int,
+        help="Maximum number of concurrent requests to the service",
     )
     parser.add_argument(
         "--require_login",

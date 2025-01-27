@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timezone
 from functools import partial
 
+import asyncio
 import numpy as np
 import ray
 from dotenv import find_dotenv, load_dotenv
@@ -73,6 +74,7 @@ async def deploy_to_ray(
     app_name: str = "SAM Image Encoder",
     min_replicas: int = 1,
     max_replicas: int = 2,
+    restart_deployment: bool = False,
     skip_test_runs: bool = False,
 ) -> None:
     """
@@ -101,14 +103,18 @@ async def deploy_to_ray(
     serve_status = ray.serve.status()
     applications = serve_status.applications
 
-    if app_name in applications:
+    if app_name in applications and restart_deployment:
         # Delete the existing application
         ray.serve.delete(app_name)
         logger.info(f"Deleted existing application '{app_name}'")
 
     # Deploy the application
     ray.serve.run(app, name=app_name, route_prefix=None)
-    logger.info(f"Deployed application '{app_name}'.")
+
+    if app_name in applications:
+        logger.info(f"Updated application deployment '{app_name}'.")
+    else:
+        logger.info(f"Deployed application '{app_name}'.")
 
     if not skip_test_runs:
         # Test run each model
@@ -129,6 +135,7 @@ def ping(context: dict = None) -> str:
 
 
 async def compute_image_embedding(
+    semaphore: asyncio.Semaphore,
     app_name: str,
     image: np.ndarray,
     model_id: str,
@@ -138,27 +145,28 @@ async def compute_image_embedding(
     """
     Compute the embeddings of an image using the specified model.
     """
-    try:
-        user = context["user"]
-        if require_login and user["is_anonymous"]:
-            raise PermissionError("You must be logged in to use this service.")
+    async with semaphore:
+        try:
+            user = context["user"]
+            if require_login and user["is_anonymous"]:
+                raise PermissionError("You must be logged in to use this service.")
 
-        user_id = user["id"]
-        logger.info(
-            f"User '{user_id}' - Computing embedding (model: '{model_id}')..."
-        )
+            user_id = user["id"]
+            logger.info(
+                f"User '{user_id}' - Computing embedding (model: '{model_id}')..."
+            )
 
-        # Compute the embedding
-        # Returns: {"features": embedding, "input_size": input_size}
-        handle = ray.serve.get_app_handle(name=app_name)
-        result = await handle.remote(model_id=model_id, array=image)
+            # Compute the embedding
+            # Returns: {"features": embedding, "input_size": input_size}
+            handle = ray.serve.get_app_handle(name=app_name)
+            result = await handle.remote(model_id=model_id, array=image)
 
-        logger.info(f"User '{user_id}' - Embedding computed successfully.")
+            logger.info(f"User '{user_id}' - Embedding computed successfully.")
 
-        return result
-    except Exception as e:
-        logger.error(f"User '{user_id}' - Error computing embedding: {e}")
-        raise e
+            return result
+        except Exception as e:
+            logger.error(f"User '{user_id}' - Error computing embedding: {e}")
+            raise e
 
 
 # def compute_mask(
@@ -344,10 +352,13 @@ async def register_service(args: dict) -> None:
     await deploy_to_ray(
         cache_dir=cache_dir,
         app_name=app_name,
+        restart_deployment=args.restart_deployment,
         skip_test_runs=args.skip_test_runs,
     )
 
     # Register a new service
+    semaphore = asyncio.Semaphore(args.max_concurrent_requests)
+
     service_info = await client.register_service(
         {
             "name": "Interactive Segmentation",
@@ -362,6 +373,7 @@ async def register_service(args: dict) -> None:
             "ping": ping,
             "compute_embedding": partial(
                 compute_image_embedding,
+                semaphore=semaphore,
                 app_name=app_name,
                 require_login=args.require_login,
             ),
