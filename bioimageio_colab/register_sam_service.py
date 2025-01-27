@@ -50,6 +50,7 @@ def parse_requirements(file_path) -> list:
 
 
 def connect_to_ray(address: str = None) -> None:
+    logger.info("Connecting to Ray...")
     # Create runtime environment
     sam_requirements = parse_requirements(
         os.path.join(BASE_DIR, "requirements-sam.txt")
@@ -85,6 +86,7 @@ async def deploy_to_ray(
     Returns:
         dict: Handles to the deployed image encoders.
     """
+    logger.info(f"Deploying the app '{app_name}' with {min_replicas} to {max_replicas} replicas on Ray Serve...")
     # Set autoscaling configuration
     autoscaling_config = AutoscalingConfig(
         min_replicas=min_replicas,
@@ -115,8 +117,10 @@ async def deploy_to_ray(
         logger.info(f"Updated application deployment '{app_name}'.")
     else:
         logger.info(f"Deployed application '{app_name}'.")
-
-    if not skip_test_runs:
+    
+    if skip_test_runs:
+        logger.info("Skipping test runs for each model.")
+    else:
         # Test run each model
         handle = ray.serve.get_app_handle(name=app_name)
         img_file = os.path.join(BASE_DIR, "data/example_image.tif")
@@ -358,7 +362,9 @@ async def register_service(args: dict) -> None:
 
     # Register a new service
     semaphore = asyncio.Semaphore(args.max_concurrent_requests)
+    logger.info(f"Created semaphore for {args.max_concurrent_requests} concurrent requests.")
 
+    logger.ingo(f"Registering the SAM service: ID='{args.service_id}', require_login={args.require_login}")
     service_info = await client.register_service(
         {
             "name": "Interactive Segmentation",
