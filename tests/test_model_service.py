@@ -6,7 +6,7 @@ from tifffile import imread
 SERVER_URL = "https://hypha.aicell.io"
 WORKSPACE_NAME = "bioimageio-colab"
 SERVICE_ID = "microsam"
-CLIENT_ID = "agCjG8oTEYusqGujdtwpZn"
+CLIENT_ID = ""
 MODEL_IDS = ["sam_vit_b", "sam_vit_b_lm", "sam_vit_b_em_organelles"]
 IMG_PATH = "./data/example_image.tif"
 
