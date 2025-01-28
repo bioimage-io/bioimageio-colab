@@ -36,6 +36,12 @@ if __name__ == "__main__":
         help="Address of the Ray cluster for running SAM",
     )
     parser.add_argument(
+        "--num_replicas",
+        default=2,
+        type=int,
+        help="Number of replicas for the SAM deployment",
+    )
+    parser.add_argument(
         "--restart_deployment",
         default=False,
         action="store_true",
@@ -49,7 +55,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--max_concurrent_requests",
-        default=10,
+        default=4,
         type=int,
         help="Maximum number of concurrent requests to the service",
     )

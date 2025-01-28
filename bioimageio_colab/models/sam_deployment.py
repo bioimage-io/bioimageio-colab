@@ -58,6 +58,9 @@ class SamDeployment:
             model_architecture=self.models[model_id]["architecture"],
         )
 
-    async def __call__(self, model_id: str, array: np.ndarray):
+    async def __call__(self, array: np.ndarray) -> np.ndarray:
+        # Get the model from the request
+        model_id = serve.get_multiplexed_model_id()
         model = await self.get_model(model_id)
+        
         return model.encode(array)
