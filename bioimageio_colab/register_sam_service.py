@@ -235,27 +235,6 @@ async def compute_image_embedding(
 #         raise e
 
 
-async def check_readiness(client: RemoteService, service_id: str) -> dict:
-    """
-    Readiness probe for the SAM service.
-    """
-    try:
-        services = await client.list_services()
-        service_found = False
-        for service in services:
-            if service["id"] == service_id:
-                service_found = True
-                break
-        assert service_found, f"Service with ID '{service_id}' not found."
-
-        logger.info(f"Service with ID '{service_id}' is ready.")
-
-        return {"status": "ready"}
-    except Exception as e:
-        logger.error(f"Error during readiness probe: {e}")
-        raise e
-
-
 def format_time(last_deployed_time_s, tz: timezone = timezone.utc) -> str:
     # Get the current time
     current_time = datetime.now(tz)
@@ -290,7 +269,9 @@ def format_time(last_deployed_time_s, tz: timezone = timezone.utc) -> str:
     }
 
 
-async def check_liveness(app_name: str, client: RemoteService, service_id: str) -> dict:
+async def deployment_status(
+    app_name: str, service_id: str, registration_time_s: float, context: dict = None
+) -> dict:
     """
     Liveness probe for the SAM service.
     """
@@ -316,13 +297,12 @@ async def check_liveness(app_name: str, client: RemoteService, service_id: str) 
                 "replica_states": deployment.replica_states,
             }
 
-        # Check if the service can be accessed
-        service = await client.get_service(service_id)
-        assert await service.ping() == "pong"
-
-        output["service"] = {
+        formatted_time = format_time(registration_time_s)
+        output["hypha_service"] = {
             "status": "RUNNING",
             "service_id": service_id,
+            "last_registered_at": formatted_time["last_deployed_at"],
+            "duration_since": formatted_time["duration_since"],
         }
 
         return output
@@ -393,6 +373,12 @@ async def register_service(args: dict) -> None:
             # Exposed functions:
             "hello": hello,
             "ping": ping,
+            "deployment_status": partial(
+                deployment_status,
+                app_name=app_name,
+                service_id=f"{workspace}/{client_id}:{args.service_id}",
+                registration_time_s=datetime.now(timezone.utc).timestamp(),
+            ),
             "compute_embedding": partial(
                 compute_image_embedding,
                 app_handle=app_handle,
@@ -409,26 +395,6 @@ async def register_service(args: dict) -> None:
     sid = service_info["id"]
     logger.info(f"Service registered with ID: {sid}")
     logger.info(f"Test the service here: {client_base_url}:{args.service_id}/hello")
-
-    # Register probes for the service
-    await client.register_probes(
-        {
-            "readiness": partial(
-                check_readiness,
-                client=client,
-                service_id=sid,
-            ),
-            "liveness": partial(
-                check_liveness,
-                app_name=app_name,
-                client=client,
-                service_id=sid,
-            ),
-        }
-    )
-
-    # This will register probes service where you can accessed via hypha or the HTTP proxy
-    logger.info(f"Probes registered at workspace: {workspace}")
     logger.info(
-        f"Test the liveness probe here: {args.server_url}/{workspace}/services/probes/liveness"
+        f"Check deployment status: {client_base_url}:{args.service_id}/deployment_status"
     )

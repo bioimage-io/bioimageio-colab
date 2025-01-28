@@ -40,7 +40,7 @@ class SamDeployment:
                 with open(model_path, "wb") as f:
                     f.write(content)
 
-    @serve.multiplexed(max_num_models_per_replica=2)
+    @serve.multiplexed(max_num_models_per_replica=1)
     async def get_model(self, model_id: str):
         import os
 

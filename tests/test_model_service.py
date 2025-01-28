@@ -11,7 +11,7 @@ MODEL_IDS = ["sam_vit_b", "sam_vit_b_lm", "sam_vit_b_em_organelles"]
 IMG_PATH = "./data/example_image.tif"
 
 
-def test_service_is_alive_http_api():
+def test_service_http_api():
     client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
     service_url = f"{SERVER_URL}/{WORKSPACE_NAME}/services/{client_str}{SERVICE_ID}"
 
@@ -23,16 +23,7 @@ def test_service_is_alive_http_api():
     assert response.status_code == 200
     assert response.json() == "pong"
 
-
-def test_probes_http_api():
-    client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
-    probes_url = f"{SERVER_URL}/{WORKSPACE_NAME}/services/{client_str}probes"
-
-    response = requests.get(f"{probes_url}/readiness")
-    assert response.status_code == 200
-    assert response.json() == {"status": "ready"}
-
-    response = requests.get(f"{probes_url}/liveness")
+    response = requests.get(f"{service_url}/deployment_status")
     assert response.status_code == 200
     for value in response.json().values():
         assert value["status"] == "RUNNING"
