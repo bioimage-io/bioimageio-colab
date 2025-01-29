@@ -270,7 +270,7 @@ def format_time(last_deployed_time_s, tz: timezone = timezone.utc) -> str:
 
 
 async def deployment_status(
-    app_name: str, service_id: str, registration_time_s: float, context: dict = None
+    app_name: str, service_id: str, registration_time_s: float, assert_status: bool = False, context: dict = None
 ) -> dict:
     """
     Liveness probe for the SAM service.
@@ -281,7 +281,6 @@ async def deployment_status(
         # Check the Ray Serve application status
         serve_status = ray.serve.status()
         application = serve_status.applications[app_name]
-        assert application.status == "RUNNING"
         formatted_time = format_time(application.last_deployed_time_s)
         output[f"application: {app_name}"] = {
             "status": application.status.value,
@@ -289,14 +288,14 @@ async def deployment_status(
             "duration_since": formatted_time["duration_since"],
         }
 
-        for name, deployment in serve_status.applications[app_name].deployments.items():
-            assert deployment.status == "HEALTHY"
-            assert deployment.replica_states["RUNNING"] > 0
+        deployments = application.deployments
+        for name, deployment in deployments.items():
             output[f"application: {app_name}"][f"deployment: {name}"] = {
                 "status": deployment.status.value,
                 "replica_states": deployment.replica_states,
             }
 
+        # Check the Hypha service status
         formatted_time = format_time(registration_time_s)
         output["hypha_service"] = {
             "status": "RUNNING",
@@ -304,6 +303,13 @@ async def deployment_status(
             "last_registered_at": formatted_time["last_deployed_at"],
             "duration_since": formatted_time["duration_since"],
         }
+
+        # Assert the status of the application and deployments
+        if assert_status:
+            assert application.status == "RUNNING"
+            for deployment in deployments.values():
+                assert deployment.status == "HEALTHY"
+                assert deployment.replica_states["RUNNING"] > 0
 
         return output
     except Exception as e:
@@ -398,3 +404,7 @@ async def register_service(args: dict) -> None:
     logger.info(
         f"Check deployment status: {client_base_url}:{args.service_id}/deployment_status"
     )
+
+    # Save the service ID to a file - indicates readiness
+    with open(os.path.join(BASE_DIR, "service_id.txt"), "w") as file:
+        file.write(sid)
