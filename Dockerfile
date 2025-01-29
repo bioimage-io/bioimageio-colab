@@ -35,7 +35,7 @@ COPY ./bioimageio_colab /app/bioimageio_colab
 COPY ./data/example_image.tif /app/data/example_image.tif
 
 # Change ownership of the application directory to the non-root user
-RUN chown -R bioimageio_colab:bioimageio_colab /app/
+RUN chown -R bioimageio_colab:bioimageio_colab /app/ && chmod u+w /app/
 
 # Switch to the non-root user
 USER bioimageio_colab
