@@ -153,29 +153,32 @@ async def compute_image_embedding(
     """
     Compute the embeddings of an image using the specified model.
     """
-    async with semaphore:
-        try:
-            user = context["user"]
-            if require_login and user["is_anonymous"]:
-                raise PermissionError("You must be logged in to use this service.")
+    try:
+        user = context["user"]
+        if require_login and user["is_anonymous"]:
+            raise PermissionError("You must be logged in to use this service.")
+        user_id = user["id"]
 
-            user_id = user["id"]
+        # Put image immediately into the object store to avoid memory issues
+        logger.info(f"User '{user_id}' - Putting image into the object store...")
+        obj_ref = ray.put(image)
+        del image
+
+        # Compute the embedding, but limit the number of concurrent requests
+        async with semaphore:
             logger.info(
                 f"User '{user_id}' - Computing embedding (model: '{model_id}')..."
             )
-
-            # Compute the embedding
-            # Returns: {"features": embedding, "input_size": input_size}
+            
+            # Format: {"features": embedding, "input_size": input_size}
             result = await app_handle.options(multiplexed_model_id=model_id).remote(
-                image
+                obj_ref
             )
-
             logger.info(f"User '{user_id}' - Embedding computed successfully.")
-
             return result
-        except Exception as e:
-            logger.error(f"User '{user_id}' - Error computing embedding: {e}")
-            raise e
+    except Exception as e:
+        logger.error(f"User '{user_id}' - Error computing embedding: {e}")
+        raise e
 
 
 # def compute_mask(
