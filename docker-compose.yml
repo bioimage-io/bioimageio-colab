@@ -14,7 +14,8 @@ services:
       "--service_id=microsam",
       "--cache_dir=/tmp/ray/.model_cache",
       "--skip_test_runs",
-      "--max_concurrent_requests=3",
+      "--num_replicas=1",
+      "--max_concurrent_requests=2",
     ]
     deploy:
       resources:

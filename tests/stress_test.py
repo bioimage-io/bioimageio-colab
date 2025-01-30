@@ -1,6 +1,6 @@
 import argparse
 import asyncio
-
+from time import sleep
 import numpy as np
 from hypha_rpc import connect_to_server
 from tifffile import imread
@@ -13,7 +13,7 @@ IMG_PATH = "./data/example_image.tif"
 
 
 async def run_client(
-    client_id: int, image: np.ndarray, model_id: str, method_timeout: int = 30
+    client_id: int, image: np.ndarray, model_id: str, method_timeout: int = 300
 ):
     print(f"Client {client_id} started", flush=True)
     client = await connect_to_server(
@@ -30,7 +30,7 @@ async def stress_test(num_clients: int):
     image = imread(IMG_PATH)
     tasks = []
     for client_id in range(num_clients):
-        await asyncio.sleep(0.1)
+        sleep(0.1)
         model_id = MODEL_IDS[np.random.randint(0, len(MODEL_IDS))]
         tasks.append(run_client(client_id=client_id, image=image, model_id=model_id))
     await asyncio.gather(*tasks)

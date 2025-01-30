@@ -8,10 +8,8 @@ import numpy as np
 import ray
 from dotenv import find_dotenv, load_dotenv
 from hypha_rpc import connect_to_server
-from hypha_rpc.rpc import RemoteService
 
 # from kaibu_utils import mask_to_features
-from ray.serve.config import AutoscalingConfig
 from tifffile import imread
 
 from bioimageio_colab.models import SAM_MODELS, SamDeployment
@@ -273,7 +271,7 @@ async def deployment_status(
     app_name: str, service_id: str, registration_time_s: float, assert_status: bool = False, context: dict = None
 ) -> dict:
     """
-    Liveness probe for the SAM service.
+    Check the status of the Ray Serve application and deployments.
     """
     try:
         output = {}
@@ -313,7 +311,7 @@ async def deployment_status(
 
         return output
     except Exception as e:
-        logger.error(f"Error during liveness probe: {e}")
+        logger.error(f"Error checking deployment status: {e}")
         raise e
 
 

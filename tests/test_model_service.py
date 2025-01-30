@@ -38,7 +38,7 @@ def test_service_python_api():
 
     client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
     sid = f"{WORKSPACE_NAME}/{client_str}{SERVICE_ID}"
-    service = client.get_service(sid, {"mode": "random"})
+    service = client.get_service(sid, {"mode": "first"})
     assert service.config.workspace == WORKSPACE_NAME
 
     # Test service functions
