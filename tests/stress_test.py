@@ -1,45 +1,60 @@
 import argparse
 import asyncio
-from time import sleep
+import os
+
 import numpy as np
 from hypha_rpc import connect_to_server
 from tifffile import imread
 
+
 SERVER_URL = "https://hypha.aicell.io"
 WORKSPACE_NAME = "bioimageio-colab"
+CLIENT_ID = os.getenv("CLIENT_ID")
 SERVICE_ID = "microsam"
 MODEL_IDS = ["sam_vit_b", "sam_vit_b_lm", "sam_vit_b_em_organelles"]
 IMG_PATH = "./data/example_image.tif"
 
 
-async def run_client(
-    client_id: int, image: np.ndarray, model_id: str, method_timeout: int = 300
-):
-    print(f"Client {client_id} started", flush=True)
+async def compute_embedding(req_id, service, image):
+    # Prepare image and model ID
+    image_prep = image + np.random.normal(0, 0.1, image.shape)
+    model_id = MODEL_IDS[np.random.randint(0, len(MODEL_IDS))]
+
+    print(f"Sending request {req_id + 1}")
+    await service.compute_embedding(
+        image=image_prep,
+        model_id=model_id,
+    )
+    print(f"Request {req_id} finished")
+
+
+async def stress_test(num_requests: int, method_timeout: int = 30):
+    # Connect to the server and get the compute service
+    service_client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
+    compute_service_id = f"{WORKSPACE_NAME}/{service_client_str}{SERVICE_ID}"
+    print(f"Compute service ID: {compute_service_id}")
     client = await connect_to_server(
         {"server_url": SERVER_URL, "method_timeout": method_timeout}
     )
-    service = await client.get_service(
-        f"{WORKSPACE_NAME}/{SERVICE_ID}", {"mode": "random"}
-    )
-    await service.compute_embedding(model_id=model_id, image=image)
-    print(f"Client {client_id} finished", flush=True)
+    service = await client.get_service(compute_service_id, {"mode": "first"})
 
-
-async def stress_test(num_clients: int):
+    # Load the image
     image = imread(IMG_PATH)
+
+    # Send requests
     tasks = []
-    for client_id in range(num_clients):
-        sleep(0.1)
-        model_id = MODEL_IDS[np.random.randint(0, len(MODEL_IDS))]
-        tasks.append(run_client(client_id=client_id, image=image, model_id=model_id))
+    for req_id in range(num_requests):
+        tasks.append(compute_embedding(req_id, service, image))
     await asyncio.gather(*tasks)
-    print("All clients finished")
+
+    print("All requests completed successfully.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num_clients", type=int, default=50)
+    parser.add_argument(
+        "--num_requests", type=int, default=30, help="Number of requests"
+    )
     args = parser.parse_args()
 
-    asyncio.run(stress_test(args.num_clients))
+    asyncio.run(stress_test(args.num_requests))

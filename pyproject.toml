@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = "bioimageio-colab"
-version = "0.2.7"
+version = "0.2.8"
 readme = "README.md"
 description = "Collaborative image annotation and model training with human in the loop."
 dependencies = [

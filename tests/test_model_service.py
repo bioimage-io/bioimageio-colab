@@ -2,11 +2,12 @@ import numpy as np
 import requests
 from hypha_rpc.sync import connect_to_server
 from tifffile import imread
+import os
 
 SERVER_URL = "https://hypha.aicell.io"
 WORKSPACE_NAME = "bioimageio-colab"
 SERVICE_ID = "microsam"
-CLIENT_ID = ""
+CLIENT_ID = os.getenv("CLIENT_ID")
 MODEL_IDS = ["sam_vit_b", "sam_vit_b_lm", "sam_vit_b_em_organelles"]
 IMG_PATH = "./data/example_image.tif"
 
