@@ -116,7 +116,7 @@ const setImageLayer = async (viewer, dataService) => {
       // Load an example image if no data provider is available
       console.log("Loading example image...");
       image = "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image.png";
-      filename = "example_image.png";
+      filename = "example_image";
     }
     console.log("Image loaded:", filename);
     let imageLayer = await viewer.view_image(image, { name: filename });
@@ -173,7 +173,7 @@ const createTensorFromUint8Array = (data, shape) => {
   return new ort.Tensor("float32", new Float32Array(dst), shape);
 };
 
-const computeEmbedding = async (samService, imageLayer, modelID) => {
+const computeEmbedding = async (samService, image, modelID) => {
   // TODO: Load precomputed embedding for sample images
 
   // Compute the embedding for the image
@@ -183,8 +183,6 @@ const computeEmbedding = async (samService, imageLayer, modelID) => {
       await api.showMessage(msg);
       return;
   }
-
-  const image = await getImageFromLayer(imageLayer);
 
   console.log(`Computing embedding for image with model ${modelID}...`);
   const embeddingPromise = samService.compute_embedding(image, modelID)
@@ -492,7 +490,8 @@ class BioImageIOColabAnnotator {
       await viewer.clear_layers();
       // Then load new image and annotation layers
       this.imageLayer = await setImageLayer(viewer, dataService);
-      const embeddingPromise = computeEmbedding(samService, this.imageLayer, this.modelID);
+      const image = await getImageFromLayer(imageLayer);
+      const embeddingPromise = computeEmbedding(samService, image, this.modelID);
       this.annotationLayer = await setAnnotationLayer(viewer, this.edgeColor, samService, embeddingPromise, this.modelPromise);
     };
     
