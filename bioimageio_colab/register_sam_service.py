@@ -143,10 +143,10 @@ def ping(context: dict = None) -> str:
 
 
 async def compute_image_embedding(
-    app_handle: ray.serve.handle.DeploymentHandle,
-    semaphore: asyncio.Semaphore,
     image: np.ndarray,
     model_id: str,
+    app_handle: ray.serve.handle.DeploymentHandle,
+    semaphore: asyncio.Semaphore,
     require_login: bool = False,
     context: dict = None,
 ) -> dict:
