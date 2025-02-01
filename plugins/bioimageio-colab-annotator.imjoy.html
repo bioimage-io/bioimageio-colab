@@ -481,11 +481,8 @@ class BioImageIOColabAnnotator {
       this.modelPromise = loadSamDecoder(this.modelID);
     };
 
-    // Start loading the model and embedding
-    await setModel();
-
     // Function to load an image and display it in the viewer with the annotation layer
-    const setImage = async () => {
+    const setImageAnnotation = async () => {
       // First remove existing layers from the viewer
       await viewer.clear_layers();
       // Then load new image and annotation layers
@@ -500,7 +497,7 @@ class BioImageIOColabAnnotator {
       // Save the current annotation if available
       await saveAnnotation(dataService, this.imageLayer, this.annotationLayer);
       // Load the next image
-      await setImage();
+      await setImageAnnotation();
     };
     
     // Add a control widget with a button to load the next image
@@ -517,8 +514,9 @@ class BioImageIOColabAnnotator {
         ],
     });
 
-    // Load the first image
-    await setImage();
+    // Start loading the model and the first image
+    await setModel();
+    await setImageAnnotation();
     await api.showMessage("Ready to annotate!");
   }
 }
