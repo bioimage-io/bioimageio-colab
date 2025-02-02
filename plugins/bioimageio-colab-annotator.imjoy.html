@@ -16,7 +16,8 @@
   "requirements": [
     "https://cdn.jsdelivr.net/npm/hypha-rpc@0.20.47/dist/hypha-rpc-websocket.min.js",
     "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js",
-    "https://docs.opencv.org/4.5.0/opencv.js"
+    "https://docs.opencv.org/4.5.0/opencv.js",
+    "https://cdn.jsdelivr.net/gh/bioimage-io/bioimageio-colab@client-side-decoder/plugins/mask-decoder.js"
   ],
   "dependencies": []
 }
@@ -24,27 +25,27 @@
 
 <script lang="javascript">
     
-const loadSamDecoder = async (modelID) => {
-  const modelUrls = {
-    // "sam_vit_b": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",  // TODO: Replace with ONNX decoder model
-    "sam_vit_b_lm": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/sam-vit_b_lm-decoder/1/model.onnx",
-    // "sam_vit_b_em_organelles": "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/noisy-ox/1/files/vit_b.pt",  // TODO: Replace with ONNX decoder model
-  };
+// -> mask-decoder.js
+// const loadSamDecoder = async ({ modelID }) => {
+//   const modelUrls = {
+//     "sam_vit_b_lm": "https://raw.githubusercontent.com/constantinpape/mbexc-review/refs/heads/master/vit_b_lm_decoder.onnx",
+//     "sam_vit_b_em_organelles": "https://raw.githubusercontent.com/constantinpape/mbexc-review/refs/heads/master/vit_b_em_decoder.onnx",
+//   };
 
-  const modelUrl = modelUrls[modelID];
-  console.log('Starting to created ONNX model from', modelUrl);
-  const modelPromise = ort.InferenceSession.create(modelUrl)
-    .then((model) => {
-      console.log('ONNX model created', model);
-      return model;
-    })
-    .catch((error) => {
-      console.error('Error creating ONNX model:', error);
-      throw error; // Propagate the error
-    });
+//   const modelUrl = modelUrls[modelID];
+//   console.log('Starting to created ONNX model from', modelUrl);
+//   const modelPromise = ort.InferenceSession.create(modelUrl)
+//     .then((model) => {
+//       console.log('ONNX model created', model);
+//       return model;
+//     })
+//     .catch((error) => {
+//       console.error('Error creating ONNX model:', error);
+//       throw error; // Propagate the error
+//     });
 
-  return modelPromise;
-};
+//   return modelPromise;
+// };
 
 const getServices = async (ctx) => {
   // Extract configuration settings and check if they are valid
@@ -104,7 +105,7 @@ const getServices = async (ctx) => {
   return [ dataService, samService ];
 };
 
-const setImageLayer = async (viewer, dataService) => { 
+const setImageLayer = async ({ viewer, dataService }) => { 
     let image;
     let filename;
     if (dataService) {
@@ -125,7 +126,7 @@ const setImageLayer = async (viewer, dataService) => {
     return imageLayer;
 };
 
-const getImageFromLayer = async (imageLayer) => {
+const getImageFromLayer = async ({ imageLayer }) => {
   const vtkImage = await imageLayer.get_image();
   const pointData = await vtkImage.getPointData()
   const scalars = await pointData.getScalars();
@@ -167,203 +168,207 @@ const getImageFromLayer = async (imageLayer) => {
   return image;
 };
 
-const createTensorFromUint8Array = (data, shape) => {
-  const dst = new ArrayBuffer(data.byteLength);
-  new Uint8Array(dst).set(new Uint8Array(data));
-  return new ort.Tensor("float32", new Float32Array(dst), shape);
-};
+// --> mask-decoder.js
+// const createTensorFromUint8Array = ({ data, shape }) => {
+//   const dst = new ArrayBuffer(data.byteLength);
+//   new Uint8Array(dst).set(new Uint8Array(data));
+//   return new ort.Tensor("float32", new Float32Array(dst), shape);
+// };
 
-const computeEmbedding = async (samService, image, modelID) => {
-  // TODO: Load precomputed embedding for sample images
 
-  // Compute the embedding for the image
-  if (!samService) {
-      const msg = "No SAM service available. Embedding computation was skipped.";
-      console.log(msg);
-      await api.showMessage(msg);
-      return;
-  }
+// --> mask-decoder.js
+// const computeEmbedding = async ({ samService, image, modelID }) => {
+//   // Compute the embedding for the image
+//   if (!samService) {
+//       const msg = "No SAM service available. Embedding computation was skipped.";
+//       console.log(msg);
+//       await api.showMessage(msg);
+//       return;
+//   }
 
-  console.log(`Computing embedding for image with model ${modelID}...`);
-  const embeddingPromise = samService.compute_embedding(image, modelID)
-    .then(embeddingResult => {
-      console.log("===== embeddingResult =====>", embeddingResult)
+//   console.log(`Computing embedding for image with model ${modelID}...`);
+//   const embeddingPromise = samService.compute_embedding(image, modelID)
+//     .then(embeddingResult => {
+//       console.log("===== embeddingResult =====>", embeddingResult);
 
-      // Set the model scale based on the image dimensions
-      // TODO: check how to use embeddingResult.input_size (directly calculate modelScale)
-      const longSideLength = Math.max(...embeddingResult["input_size"]);
-      const w = image._rshape[0];
-      const h = image._rshape[1];
-      const samScale = longSideLength / Math.max(h, w);
-      const modelScale = { height: h, width: w, samScale };
-      console.log("===== modelScale =====>", modelScale)
+//       // Set the model scale based on the image dimensions
+//       // TODO: check how to use embeddingResult.input_size (directly calculate modelScale)
+//       const longSideLength = Math.max(...embeddingResult["input_size"]);
+//       const w = image._rshape[0];
+//       const h = image._rshape[1];
+//       const samScale = longSideLength / Math.max(h, w);
+//       const modelScale = { height: h, width: w, samScale };
+//       console.log("===== modelScale =====>", modelScale);
 
-      // Create the embedding tensor
-      const embeddingTensor = createTensorFromUint8Array(
-        embeddingResult.features._rvalue,
-        embeddingResult.features._rshape
-      )
-      console.log("===== embeddingTensor =====>", embeddingTensor)
+//       // Create the embedding tensor
+//       const embeddingTensor = createTensorFromUint8Array({
+//         data: embeddingResult.features._rvalue,
+//         shape: embeddingResult.features._rshape,
+//       });
+//       console.log("===== embeddingTensor =====>", embeddingTensor);
 
-      return { embeddingTensor, modelScale };
-    })
-    .catch(error => {
-      // Catch any errors during the embedding calculation or tensor preparation
-      console.error('An error occurred while preparing the embedding:', error);
-      throw error; // Propagate the error to be handled later
-    });
+//       return { embeddingTensor, modelScale };
+//     })
+//     .catch(error => {
+//       // Catch any errors during the embedding calculation or tensor preparation
+//       console.error('An error occurred while preparing the embedding:', error);
+//       throw error; // Propagate the error to be handled later
+//     });
 
-  return embeddingPromise;
-};
+//   return embeddingPromise;
+// };
 
-const prepareModelData = ({ embeddingResult, coordinates }) => {
-  let pointCoords;
-  let pointLabels;
-  let pointCoordsTensor;
-  let pointLabelsTensor;
+// --> mask-decoder.js
+// const prepareModelData = ({ embeddingResult, coordinates }) => {
+//   let pointCoords;
+//   let pointLabels;
+//   let pointCoordsTensor;
+//   let pointLabelsTensor;
 
-  const embeddingTensor = embeddingResult.embeddingTensor;
-  const modelScale = embeddingResult.modelScale;
+//   const embeddingTensor = embeddingResult.embeddingTensor;
+//   const modelScale = embeddingResult.modelScale;
 
-  // Prepare input for the model
-  const clicks = [ {
-      x: coordinates[0], 
-      y: coordinates[1], 
-      clickType: 1
-  } ];
+//   // Prepare input for the model
+//   const clicks = [ {
+//       x: coordinates[0], 
+//       y: coordinates[1], 
+//       clickType: 1
+//   } ];
 
-  console.log('===== clicks =====>', clicks)
+//   console.log('===== clicks =====>', clicks);
 
-  // Check there are input click prompts
-  if (clicks) {
-    let n = clicks.length;
+//   // Check there are input click prompts
+//   if (clicks) {
+//     let n = clicks.length;
 
-    // If there is no box input, a single padding point with 
-    // label -1 and coordinates (0.0, 0.0) should be concatenated
-    // so initialize the array to support (n + 1) points.
-    pointCoords = new Float32Array(2 * (n + 1));
-    pointLabels = new Float32Array(n + 1);
+//     // If there is no box input, a single padding point with 
+//     // label -1 and coordinates (0.0, 0.0) should be concatenated
+//     // so initialize the array to support (n + 1) points.
+//     pointCoords = new Float32Array(2 * (n + 1));
+//     pointLabels = new Float32Array(n + 1);
 
-    // Add clicks and scale to what SAM expects
-    for (let i = 0; i < n; i++) {
-      pointCoords[2 * i] = clicks[i].x * modelScale.samScale;
-      pointCoords[2 * i + 1] = clicks[i].y * modelScale.samScale;
-      pointLabels[i] = clicks[i].clickType;
-    }
+//     // Add clicks and scale to what SAM expects
+//     for (let i = 0; i < n; i++) {
+//       pointCoords[2 * i] = clicks[i].x * modelScale.samScale;
+//       pointCoords[2 * i + 1] = clicks[i].y * modelScale.samScale;
+//       pointLabels[i] = clicks[i].clickType;
+//     }
 
-    // Add in the extra point/label when only clicks and no box
-    // The extra point is at (0, 0) with label -1
-    pointCoords[2 * n] = 0.0;
-    pointCoords[2 * n + 1] = 0.0;
-    pointLabels[n] = -1.0;
+//     // Add in the extra point/label when only clicks and no box
+//     // The extra point is at (0, 0) with label -1
+//     pointCoords[2 * n] = 0.0;
+//     pointCoords[2 * n + 1] = 0.0;
+//     pointLabels[n] = -1.0;
 
-    // Create the tensor
-    pointCoordsTensor = new ort.Tensor("float32", pointCoords, [1, n + 1, 2]);
-    pointLabelsTensor = new ort.Tensor("float32", pointLabels, [1, n + 1]);
-  }
-  const imageSizeTensor = new ort.Tensor("float32", [
-    modelScale.height,
-    modelScale.width,
-  ]);
+//     // Create the tensor
+//     pointCoordsTensor = new ort.Tensor("float32", pointCoords, [1, n + 1, 2]);
+//     pointLabelsTensor = new ort.Tensor("float32", pointLabels, [1, n + 1]);
+//   }
+//   const imageSizeTensor = new ort.Tensor("float32", [
+//     modelScale.height,
+//     modelScale.width,
+//   ]);
 
-  if (pointCoordsTensor === undefined || pointLabelsTensor === undefined)
-    return;
+//   if (pointCoordsTensor === undefined || pointLabelsTensor === undefined)
+//     return;
 
-  // There is no previous mask, so default to an empty tensor
-  const maskInput = new ort.Tensor(
-    "float32",
-    new Float32Array(256 * 256),
-    [1, 1, 256, 256]
-  );
-  // There is no previous mask, so default to 0
-  const hasMaskInput = new ort.Tensor("float32", [0]);
+//   // There is no previous mask, so default to an empty tensor
+//   const maskInput = new ort.Tensor(
+//     "float32",
+//     new Float32Array(256 * 256),
+//     [1, 1, 256, 256]
+//   );
+//   // There is no previous mask, so default to 0
+//   const hasMaskInput = new ort.Tensor("float32", [0]);
 
-  const feeds = {
-    image_embeddings: embeddingTensor,
-    point_coords: pointCoordsTensor,
-    point_labels: pointLabelsTensor,
-    orig_im_size: imageSizeTensor,
-    mask_input: maskInput,
-    has_mask_input: hasMaskInput,
-  };
-  console.log('===== feeds =====>', feeds)
-  return feeds;
-};
+//   const feeds = {
+//     image_embeddings: embeddingTensor,
+//     point_coords: pointCoordsTensor,
+//     point_labels: pointLabelsTensor,
+//     orig_im_size: imageSizeTensor,
+//     mask_input: maskInput,
+//     has_mask_input: hasMaskInput,
+//   };
+//   console.log('===== feeds =====>', feeds);
+//   return feeds;
+// };
 
-const processMaskToGeoJSON = (masks) => {
-  // Dimensions of the mask (batch, channels, width, height)
-  const [b, c, width, height] = masks.dims;
 
-  // 1. Apply threshold to create binary mask
-  const binaryMask = new Uint8Array(width * height);
-  for (let i = 0; i < masks.data.length; i++) {
-    binaryMask[i] = masks.data[i] > 0.0 ? 255 : 0;
-  }
+// --> mask-decoder.js
+// const processMaskToGeoJSON = ({ masks }) => {
+//   // Dimensions of the mask (batch, channels, width, height)
+//   const [b, c, width, height] = masks.dims;
 
-  // Convert binaryMask to an OpenCV.js Mat
-  const binaryMat = new cv.Mat(height, width, cv.CV_8UC1);
-  binaryMat.data.set(binaryMask);
+//   // 1. Apply threshold to create binary mask
+//   const binaryMask = new Uint8Array(width * height);
+//   for (let i = 0; i < masks.data.length; i++) {
+//     binaryMask[i] = masks.data[i] > 0.0 ? 255 : 0;
+//   }
 
-  // 2. Use OpenCV.js to find contours
-  const contours = new cv.MatVector();
-  const hierarchy = new cv.Mat();
-  cv.findContours(
-    binaryMat,
-    contours,
-    hierarchy,
-    cv.RETR_EXTERNAL, // Retrieve only external contours
-    cv.CHAIN_APPROX_SIMPLE // Compress horizontal, vertical, and diagonal segments
-  );
+//   // Convert binaryMask to an OpenCV.js Mat
+//   const binaryMat = new cv.Mat(height, width, cv.CV_8UC1);
+//   binaryMat.data.set(binaryMask);
 
-  // 3. Process contours into GeoJSON-compatible features
-  const features = [];
+//   // 2. Use OpenCV.js to find contours
+//   const contours = new cv.MatVector();
+//   const hierarchy = new cv.Mat();
+//   cv.findContours(
+//     binaryMat,
+//     contours,
+//     hierarchy,
+//     cv.RETR_EXTERNAL, // Retrieve only external contours
+//     cv.CHAIN_APPROX_SIMPLE // Compress horizontal, vertical, and diagonal segments
+//   );
 
-  if (contours.size() > 0) {
-    // Pick the largest contour as the main object
-    let largestContourIndex = 0;
-    let largestContourSize = 0;
-    for (let i = 0; i < contours.size(); i++) {
-      const c = contours.get(i);
-      if (c.rows > largestContourSize) {
-        largestContourSize = c.rows;
-        largestContourIndex = i;
-      }
-    }
+//   // 3. Process contours into GeoJSON-compatible features
+//   const features = [];
 
-    const largestContour = contours.get(largestContourIndex);
-    const pts = [];
+//   if (contours.size() > 0) {
+//     // Pick the largest contour as the main object
+//     let largestContourIndex = 0;
+//     let largestContourSize = 0;
+//     for (let i = 0; i < contours.size(); i++) {
+//       const c = contours.get(i);
+//       if (c.rows > largestContourSize) {
+//         largestContourSize = c.rows;
+//         largestContourIndex = i;
+//       }
+//     }
 
-    for (let i = 0; i < largestContour.rows; i++) {
-      const x = largestContour.intPtr(i)[0]; // x coordinate
-      const y = largestContour.intPtr(i)[1]; // y coordinate
-      pts.push([x, y]);
-    }
+//     const largestContour = contours.get(largestContourIndex);
+//     const pts = [];
 
-    // Close the polygon if not closed
-    if (
-      pts.length > 0 &&
-      (pts[0][0] !== pts[pts.length - 1][0] || pts[0][1] !== pts[pts.length - 1][1])
-    ) {
-      pts.push(pts[0]);
-    }
+//     for (let i = 0; i < largestContour.rows; i++) {
+//       const x = largestContour.intPtr(i)[0]; // x coordinate
+//       const y = largestContour.intPtr(i)[1]; // y coordinate
+//       pts.push([x, y]);
+//     }
 
-    // Add the polygon to the features array
-    features.push(pts);
-  }
+//     // Close the polygon if not closed
+//     if (
+//       pts.length > 0 &&
+//       (pts[0][0] !== pts[pts.length - 1][0] || pts[0][1] !== pts[pts.length - 1][1])
+//     ) {
+//       pts.push(pts[0]);
+//     }
 
-  console.log('===== contours =====>', features);
+//     // Add the polygon to the features array
+//     features.push(pts);
+//   }
 
-  // Clean up memory
-  contours.delete();
-  hierarchy.delete();
-  binaryMat.delete();
+//   console.log('===== contours =====>', features);
 
-  return features;
-};
+//   // Clean up memory
+//   contours.delete();
+//   hierarchy.delete();
+//   binaryMat.delete();
 
-const addMaskToLayer = async (annotationLayer, masks, edgeColor) => {
+//   return features;
+// };
+
+const addMaskToLayer = async ({ annotationLayer, masks, edgeColor }) => {
   // Process the masks into GeoJSON-compatible features
-  const features = processMaskToGeoJSON(masks);
+  const features = processMaskToGeoJSON({ masks: masks });
 
   // Add the segmented features as polygons to the annotation layer
   for (let coords of features) {
@@ -386,7 +391,7 @@ const addMaskToLayer = async (annotationLayer, masks, edgeColor) => {
   return annotationLayer;
 };
 
-const setAnnotationLayer = async (viewer, edgeColor, samService, embeddingPromise, modelPromise) => {
+const setAnnotationLayer = async ({ viewer, edgeColor, samService, embeddingPromise, modelPromise }) => {
   // Add the annotation functionality to the interface
   let annotationLayer
   annotationLayer = await viewer.add_shapes([], {
@@ -416,14 +421,18 @@ const setAnnotationLayer = async (viewer, edgeColor, samService, embeddingPromis
             const model = await modelPromise; 
             const results = await model.run(feeds);
             console.log("===== results =====>", results);
-            annotationLayer = await addMaskToLayer(annotationLayer, results["masks"], edgeColor);
+            annotationLayer = await addMaskToLayer({
+              annotationLayer: annotationLayer,
+              masks: results["masks"],
+              edgeColor: edgeColor,
+            });
           }
       }
   });
   return annotationLayer;
 };
 
-const saveAnnotation = async (dataService, imageLayer, annotationLayer) => {
+const saveAnnotation = async ({ dataService, imageLayer, annotationLayer }) => {
     // Do not save if no data service or annotation layer is available
     
     if (!dataService) {
@@ -478,7 +487,7 @@ class BioImageIOColabAnnotator {
 
     const setModel = async () => {
       // Load the decoder for the selected model
-      this.modelPromise = loadSamDecoder(this.modelID);
+      this.modelPromise = loadSamDecoder({modelID: this.modelID});
     };
 
     // Function to load an image and display it in the viewer with the annotation layer
@@ -486,16 +495,34 @@ class BioImageIOColabAnnotator {
       // First remove existing layers from the viewer
       await viewer.clear_layers();
       // Then load new image and annotation layers
-      this.imageLayer = await setImageLayer(viewer, dataService);
-      const image = await getImageFromLayer(imageLayer);
-      const embeddingPromise = computeEmbedding(samService, image, this.modelID);
-      this.annotationLayer = await setAnnotationLayer(viewer, this.edgeColor, samService, embeddingPromise, this.modelPromise);
+      this.imageLayer = await setImageLayer({
+        viewer: viewer,
+        dataService: dataService,
+      });
+      const image = await getImageFromLayer({imageLayer: this.imageLayer});
+      // TODO: Load precomputed embedding for sample images
+      const embeddingPromise = computeEmbedding({
+        samService: samService,
+        image: image,
+        modelID: this.modelID,
+      });
+      this.annotationLayer = await setAnnotationLayer({
+        viewer: viewer,
+        edgeColor: this.edgeColor,
+        samService: samService,
+        embeddingPromise: embeddingPromise,
+        modelPromise: this.modelPromise,
+      });
     };
     
     // Function to load the next image
     const nextImage = async () => {
       // Save the current annotation if available
-      await saveAnnotation(dataService, this.imageLayer, this.annotationLayer);
+      await saveAnnotation({
+        dataService: dataService,
+        imageLayer: this.imageLayer,
+        annotationLayer: this.annotationLayer,
+      });
       // Load the next image
       await setImageAnnotation();
     };
