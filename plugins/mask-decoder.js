@@ -140,6 +140,22 @@ const prepareModelData = ({ embeddingResult, coordinates }) => {
     return feeds;
 };
 
+const segmentImage = async ({ modelPromise, embeddingPromise, coordinates, }) => {
+    const embeddingResult = await embeddingPromise;
+    const feeds = prepareModelData({
+        embeddingResult: embeddingResult,
+        coordinates: coordinates,
+    });
+    if (feeds === undefined) {
+      console.log("No input data available for model.");
+      return;
+    }
+    const model = await modelPromise; 
+    const results = await model.run(feeds);
+    console.log("===== results =====>", results);
+    return results;
+};
+
 const processMaskToGeoJSON = ({ masks }) => {
     // Dimensions of the mask (batch, channels, width, height)
     const [b, c, width, height] = masks.dims;

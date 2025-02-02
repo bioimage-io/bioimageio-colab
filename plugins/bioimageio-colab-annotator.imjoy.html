@@ -189,18 +189,11 @@ const setAnnotationLayer = async ({ viewer, edgeColor, samService, embeddingProm
               return;
             }
             // Segment the image and add the mask to the annotation layer
-            const embeddingResult = await embeddingPromise;
-            const feeds = prepareModelData({
-                embeddingResult: embeddingResult,
-                coordinates: shape.geometry.coordinates,
-            });
-            if (feeds === undefined) {
-              console.log("No input data available for model.");
-              return;
-            }
-            const model = await modelPromise; 
-            const results = await model.run(feeds);
-            console.log("===== results =====>", results);
+            const results = await segmentImage({
+              modelPromise: modelPromise,
+              embeddingPromise: embeddingPromise,
+              coordinates: shape.geometry.coordinates,
+            })
             annotationLayer = await addMaskToLayer({
               annotationLayer: annotationLayer,
               masks: results["masks"],
