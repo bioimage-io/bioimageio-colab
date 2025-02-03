@@ -11,6 +11,7 @@ tmp/
 output/
 .ipynb_checkpoints
 .DS_Store
+*/__MACOSX
 *.pt
 *.pth
 *zip
