@@ -31,7 +31,6 @@ const createInputTensors = ({ embeddingFeatures, originalImageShape, samScale })
         data: embeddingFeatures._rvalue,
         shape: embeddingFeatures._rshape,
     });
-    console.log("Embedding tensor created from the result:", embeddingTensor);
 
     // Create the image size tensor
     const imageSizeTensor = new ort.Tensor("float32", [
@@ -57,12 +56,13 @@ const computeEmbedding = async ({ samService, image, modelID }) => {
     const embeddingPromise = samService.compute_embedding(image, modelID)
         .then(embeddingResult => {
             console.log("Received embedding result:", embeddingResult);
-            return createInputTensors({
+            const inputTensors = createInputTensors({
                 embeddingFeatures: embeddingResult["features"],
                 originalImageShape: embeddingResult["original_image_shape"],
                 samScale: embeddingResult["sam_scale"],
             });
-
+            console.log("Input tensors created:", inputTensors);
+            return inputTensors;
         })
         .catch(error => {
             // Catch any errors during the embedding calculation or tensor preparation
