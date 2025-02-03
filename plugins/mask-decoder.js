@@ -25,47 +25,44 @@ const createTensorFromUint8Array = ({ data, shape }) => {
     return new ort.Tensor("float32", new Float32Array(dst), shape);
 };
 
+const createInputTensors = ({ embeddingFeatures, originalImageShape, samScale }) => {
+    // Create the embedding tensor
+    const embeddingTensor = createTensorFromUint8Array({
+        data: embeddingFeatures._rvalue,
+        shape: embeddingFeatures._rshape,
+    });
+    console.log("Embedding tensor created from the result:", embeddingTensor);
+
+    // Create the image size tensor
+    const imageSizeTensor = new ort.Tensor("float32", [
+        originalImageShape[0],
+        originalImageShape[1],
+    ]);
+
+    // There is no previous mask, so default to an empty tensor
+    const maskInput = new ort.Tensor(
+        "float32",
+        new Float32Array(256 * 256),
+        [1, 1, 256, 256]
+    );
+    // There is no previous mask, so default to 0
+    const hasMaskInput = new ort.Tensor("float32", [0]);
+
+    return { embeddingTensor, imageSizeTensor, samScale, maskInput, hasMaskInput };
+};
+
 const computeEmbedding = async ({ samService, image, modelID }) => {
     // Compute the embedding for the image
-    if (!samService) {
-        const msg = "No SAM service available. Embedding computation was skipped.";
-        console.log(msg);
-        await api.showMessage(msg);
-        return;
-    }
-
     console.log(`Computing embedding for image with model ${modelID}...`);
     const embeddingPromise = samService.compute_embedding(image, modelID)
         .then(embeddingResult => {
             console.log("Received embedding result:", embeddingResult);
-
-            // Create the embedding tensor
-            const embeddingTensor = createTensorFromUint8Array({
-                data: embeddingResult.features._rvalue,
-                shape: embeddingResult.features._rshape,
+            return createInputTensors({
+                embeddingFeatures: embeddingResult["features"],
+                originalImageShape: embeddingResult["original_image_shape"],
+                samScale: embeddingResult["sam_scale"],
             });
-            console.log("Embedding tensor created from the result:", embeddingTensor);
 
-            // Create the image size tensor
-            const originalImageShape = embeddingResult["original_image_shape"];
-            const imageSizeTensor = new ort.Tensor("float32", [
-                originalImageShape[0],
-                originalImageShape[1],
-            ]);
-
-            // Get the SAM scale
-            const samScale = embeddingResult["sam_scale"];
-
-            // There is no previous mask, so default to an empty tensor
-            const maskInput = new ort.Tensor(
-                "float32",
-                new Float32Array(256 * 256),
-                [1, 1, 256, 256]
-            );
-            // There is no previous mask, so default to 0
-            const hasMaskInput = new ort.Tensor("float32", [0]);
-
-            return { embeddingTensor, imageSizeTensor, samScale, maskInput, hasMaskInput };
         })
         .catch(error => {
             // Catch any errors during the embedding calculation or tensor preparation
