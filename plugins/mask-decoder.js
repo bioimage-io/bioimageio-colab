@@ -5,15 +5,15 @@ const loadSamDecoder = async ({ modelID }) => {
     };
 
     const modelUrl = modelUrls[modelID];
-    console.log('Starting to created ONNX model from', modelUrl);
+    console.log("Starting to created ONNX model from", modelUrl);
     const modelPromise = ort.InferenceSession.create(modelUrl)
         .then((model) => {
-        console.log('ONNX model created', model);
-        return model;
+            console.log("ONNX model created", model);
+            return model;
         })
         .catch((error) => {
-        console.error('Error creating ONNX model:', error);
-        throw error; // Propagate the error
+            console.error("Error creating ONNX model:", error);
+            throw error; // Propagate the error
         });
 
     return modelPromise;
@@ -33,57 +33,60 @@ const computeEmbedding = async ({ samService, image, modelID }) => {
         await api.showMessage(msg);
         return;
     }
-  
+
     console.log(`Computing embedding for image with model ${modelID}...`);
     const embeddingPromise = samService.compute_embedding(image, modelID)
         .then(embeddingResult => {
-            console.log("===== embeddingResult =====>", embeddingResult);
-    
-            // Set the model scale based on the image dimensions
-            // TODO: check how to use embeddingResult.input_size (directly calculate modelScale)
-            const longSideLength = Math.max(...embeddingResult["input_size"]);
-            const w = image._rshape[0];
-            const h = image._rshape[1];
-            const samScale = longSideLength / Math.max(h, w);
-            const modelScale = { height: h, width: w, samScale };
-            console.log("===== modelScale =====>", modelScale);
-    
+            console.log("Received embedding result:", embeddingResult);
+
             // Create the embedding tensor
             const embeddingTensor = createTensorFromUint8Array({
-            data: embeddingResult.features._rvalue,
-            shape: embeddingResult.features._rshape,
+                data: embeddingResult.features._rvalue,
+                shape: embeddingResult.features._rshape,
             });
-            console.log("===== embeddingTensor =====>", embeddingTensor);
-    
-            return { embeddingTensor, modelScale };
+            console.log("Embedding tensor created from the result:", embeddingTensor);
+
+            // Create the image size tensor
+            const originalImageShape = embeddingResult["original_image_shape"];
+            const imageSizeTensor = new ort.Tensor("float32", [
+                originalImageShape[0],
+                originalImageShape[1],
+            ]);
+
+            // Get the SAM scale
+            const samScale = embeddingResult["sam_scale"];
+
+            // There is no previous mask, so default to an empty tensor
+            const maskInput = new ort.Tensor(
+                "float32",
+                new Float32Array(256 * 256),
+                [1, 1, 256, 256]
+            );
+            // There is no previous mask, so default to 0
+            const hasMaskInput = new ort.Tensor("float32", [0]);
+
+            return { embeddingTensor, imageSizeTensor, samScale, maskInput, hasMaskInput };
         })
         .catch(error => {
             // Catch any errors during the embedding calculation or tensor preparation
-            console.error('An error occurred while preparing the embedding:', error);
+            console.error("An error occurred while preparing the embedding:", error);
             throw error; // Propagate the error to be handled later
         });
-  
+
     return embeddingPromise;
 };
 
 const prepareModelData = ({ embeddingResult, coordinates }) => {
-    let pointCoords;
-    let pointLabels;
     let pointCoordsTensor;
     let pointLabelsTensor;
-  
-    const embeddingTensor = embeddingResult.embeddingTensor;
-    const modelScale = embeddingResult.modelScale;
-  
+
     // Prepare input for the model
-    const clicks = [ {
-        x: coordinates[0], 
-        y: coordinates[1], 
+    const clicks = [{
+        x: coordinates[0],
+        y: coordinates[1],
         clickType: 1
-    } ];
-  
-    console.log('===== clicks =====>', clicks);
-  
+    }];
+
     // Check there are input click prompts
     if (clicks) {
         let n = clicks.length;
@@ -96,11 +99,11 @@ const prepareModelData = ({ embeddingResult, coordinates }) => {
 
         // Add clicks and scale to what SAM expects
         for (let i = 0; i < n; i++) {
-            pointCoords[2 * i] = clicks[i].x * modelScale.samScale;
-            pointCoords[2 * i + 1] = clicks[i].y * modelScale.samScale;
+            pointCoords[2 * i] = clicks[i].x * embeddingResult.samScale;
+            pointCoords[2 * i + 1] = clicks[i].y * embeddingResult.samScale;
             pointLabels[i] = clicks[i].clickType;
         }
-  
+
         // Add in the extra point/label when only clicks and no box
         // The extra point is at (0, 0) with label -1
         pointCoords[2 * n] = 0.0;
@@ -111,33 +114,17 @@ const prepareModelData = ({ embeddingResult, coordinates }) => {
         pointCoordsTensor = new ort.Tensor("float32", pointCoords, [1, n + 1, 2]);
         pointLabelsTensor = new ort.Tensor("float32", pointLabels, [1, n + 1]);
     }
-    const imageSizeTensor = new ort.Tensor("float32", [
-        modelScale.height,
-        modelScale.width,
-    ]);
-  
     if (pointCoordsTensor === undefined || pointLabelsTensor === undefined)
         return;
-  
-    // There is no previous mask, so default to an empty tensor
-    const maskInput = new ort.Tensor(
-        "float32",
-        new Float32Array(256 * 256),
-        [1, 1, 256, 256]
-    );
-    // There is no previous mask, so default to 0
-    const hasMaskInput = new ort.Tensor("float32", [0]);
-  
-    const feeds = {
-        image_embeddings: embeddingTensor,
+
+    return {
+        image_embeddings: embeddingResult.embeddingTensor,
         point_coords: pointCoordsTensor,
         point_labels: pointLabelsTensor,
-        orig_im_size: imageSizeTensor,
-        mask_input: maskInput,
-        has_mask_input: hasMaskInput,
+        orig_im_size: embeddingResult.imageSizeTensor,
+        mask_input: embeddingResult.maskInput,
+        has_mask_input: embeddingResult.hasMaskInput,
     };
-    console.log('===== feeds =====>', feeds);
-    return feeds;
 };
 
 const segmentImage = async ({ modelPromise, embeddingPromise, coordinates, }) => {
@@ -146,30 +133,31 @@ const segmentImage = async ({ modelPromise, embeddingPromise, coordinates, }) =>
         embeddingResult: embeddingResult,
         coordinates: coordinates,
     });
+    console.log("Feeds prepared for the model:", feeds);
     if (feeds === undefined) {
-      console.log("No input data available for model.");
-      return;
+        console.log("No input data available for model.");
+        return;
     }
-    const model = await modelPromise; 
+    const model = await modelPromise;
     const results = await model.run(feeds);
-    console.log("===== results =====>", results);
+    console.log("Model results:", results);
     return results;
 };
 
 const processMaskToGeoJSON = ({ masks }) => {
     // Dimensions of the mask (batch, channels, width, height)
     const [b, c, width, height] = masks.dims;
-  
+
     // 1. Apply threshold to create binary mask
     const binaryMask = new Uint8Array(width * height);
     for (let i = 0; i < masks.data.length; i++) {
         binaryMask[i] = masks.data[i] > 0.0 ? 255 : 0;
     }
-  
+
     // Convert binaryMask to an OpenCV.js Mat
     const binaryMat = new cv.Mat(height, width, cv.CV_8UC1);
     binaryMat.data.set(binaryMask);
-  
+
     // 2. Use OpenCV.js to find contours
     const contours = new cv.MatVector();
     const hierarchy = new cv.Mat();
@@ -180,20 +168,20 @@ const processMaskToGeoJSON = ({ masks }) => {
         cv.RETR_EXTERNAL, // Retrieve only external contours
         cv.CHAIN_APPROX_SIMPLE // Compress horizontal, vertical, and diagonal segments
     );
-  
+
     // 3. Process contours into GeoJSON-compatible features
     const features = [];
-  
+
     if (contours.size() > 0) {
         // Pick the largest contour as the main object
         let largestContourIndex = 0;
         let largestContourSize = 0;
         for (let i = 0; i < contours.size(); i++) {
-        const c = contours.get(i);
-        if (c.rows > largestContourSize) {
-            largestContourSize = c.rows;
-            largestContourIndex = i;
-        }
+            const c = contours.get(i);
+            if (c.rows > largestContourSize) {
+                largestContourSize = c.rows;
+                largestContourIndex = i;
+            }
         }
 
         const largestContour = contours.get(largestContourIndex);
@@ -216,13 +204,13 @@ const processMaskToGeoJSON = ({ masks }) => {
         // Add the polygon to the features array
         features.push(pts);
     }
-  
-    console.log('===== contours =====>', features);
-  
+
+    console.log("Features extracted from the mask:", features);
+
     // Clean up memory
     contours.delete();
     hierarchy.delete();
     binaryMat.delete();
-  
+
     return features;
 };
