@@ -2,7 +2,7 @@ from hypha_rpc.sync import connect_to_server
 from tifffile import imread
 
 SERVER_URL = "https://hypha.aicell.io"
-SID = "bioimageio-colab/WTcUadEGn2jgF8nSQ9or3C:microsam"
+SID = "bioimageio-colab/microsam"
 MODEL_ID = "sam_vit_b_lm"
 IMG_PATH = "./data/example_image.tif"
 BINARY_PATH = f"./data/example_image_embedding.bin"
@@ -24,6 +24,7 @@ features = result["features"]
 features.tofile(BINARY_PATH)
 print(f"Saved features to {BINARY_PATH}")
 
+print(f"Features: {features[0, 0, 0, :5]}...")
 print(f"Features shape: {features.shape}")
 print(f"Image original shape: {result['original_image_shape']}")
 print(f"SAM scale: {result['sam_scale']}")
