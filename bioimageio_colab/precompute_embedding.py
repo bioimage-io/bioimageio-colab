@@ -1,19 +1,16 @@
 from hypha_rpc.sync import connect_to_server
 from tifffile import imread
-import msgpack
-
 
 SERVER_URL = "https://hypha.aicell.io"
-SID = "bioimageio-colab/microsam"
+SID = "bioimageio-colab/WTcUadEGn2jgF8nSQ9or3C:microsam"
 MODEL_ID = "sam_vit_b_lm"
 IMG_PATH = "./data/example_image.tif"
-BINARY_PATH = f"./data/example_image_embedding_{MODEL_ID}.bin"
+BINARY_PATH = f"./data/example_image_embedding.bin"
 
 
 # Connect to the server and get the service
 client = connect_to_server({"server_url": SERVER_URL})
-service = client.get_service(SID, {"mode": "first"})
-
+service = client.get_service(SID, {"mode": "last"})
 
 # Load the image and compute the embedding
 image = imread(IMG_PATH)
@@ -22,11 +19,11 @@ result = service.compute_embedding(
     model_id=MODEL_ID,
 )
 
-# Add the model_id to the result and encode it
-result["model_id"] = MODEL_ID
-b_object = client.rpc._encode(result)
+# Save the features to a binary file
+features = result["features"]
+features.tofile(BINARY_PATH)
+print(f"Saved features to {BINARY_PATH}")
 
-# Save the result to binary file using msgpack
-with open(BINARY_PATH, "wb") as f:
-    packed_data = msgpack.packb(b_object, use_bin_type=True)
-    f.write(packed_data)
+print(f"Features shape: {features.shape}")
+print(f"Image original shape: {result['original_image_shape']}")
+print(f"SAM scale: {result['sam_scale']}")
