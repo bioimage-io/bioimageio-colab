@@ -60,9 +60,15 @@ def test_service_python_api():
         assert isinstance(embedding, np.ndarray)
         assert embedding.shape == (1, 256, 64, 64)
 
-        input_size = result["input_size"]
-        assert isinstance(input_size, list)
-        assert len(input_size) == 2
+        original_image_shape = result["original_image_shape"]
+        assert isinstance(original_image_shape, list)
+        assert original_image_shape == [512, 512]
+
+        sam_scale = result["sam_scale"]
+        assert isinstance(sam_scale, float)
+        assert sam_scale == 2.0
+
+
 
     # Test mask computation
     # polygon_features = service.compute_mask(
