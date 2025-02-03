@@ -65,11 +65,9 @@ async def register_service(
     supported_file_types_json: str,
     name: str,
     description: str,
+    images_path: str = "/mnt",
+    annotations_path: str = "/mnt/annotations",
 ):
-    # Define path to images and annotations
-    images_path = "/mnt"
-    annotations_path = "/mnt/annotations"
-
     # Check if the images folder exists
     if not os.path.isdir(images_path):
         raise FileNotFoundError("Mounted images folder not found")
