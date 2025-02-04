@@ -1,3 +1,9 @@
+"""
+This script cleans up all dangling services in the workspace.
+
+User interface for this feature available in the Hypha dashboard ( https://hypha.aicell.io/bioimageio-colab#dashboard -> brush icon ).
+"""
+
 from hypha_rpc.sync import connect_to_server, login
 
 

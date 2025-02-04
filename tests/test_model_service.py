@@ -16,15 +16,15 @@ def test_service_http_api():
     client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
     service_url = f"{SERVER_URL}/{WORKSPACE_NAME}/services/{client_str}{SERVICE_ID}"
 
-    response = requests.get(f"{service_url}/hello?_mode=first")
+    response = requests.get(f"{service_url}/hello?_mode=last")
     assert response.status_code == 200
     assert response.json() == "Welcome to the Interactive Segmentation service!"
 
-    response = requests.get(f"{service_url}/ping?_mode=first")
+    response = requests.get(f"{service_url}/ping?_mode=last")
     assert response.status_code == 200
     assert response.json() == "pong"
 
-    response = requests.get(f"{service_url}/deployment_status?assert_status=True&_mode=first")
+    response = requests.get(f"{service_url}/deployment_status?assert_status=True&_mode=last")
     assert response.status_code == 200
     for value in response.json().values():
         assert value["status"] == "RUNNING"
@@ -39,7 +39,7 @@ def test_service_python_api():
 
     client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
     sid = f"{WORKSPACE_NAME}/{client_str}{SERVICE_ID}"
-    service = client.get_service(sid, {"mode": "first"})
+    service = client.get_service(sid, {"mode": "last"})
     assert service.config.workspace == WORKSPACE_NAME
 
     # Test service functions
