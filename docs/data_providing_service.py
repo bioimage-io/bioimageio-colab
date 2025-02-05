@@ -76,10 +76,10 @@ async def register_service(
     supported_file_types = tuple(json.loads(supported_file_types_json))
 
     # Connect to the server link
-    server = await connect_to_server({"server_url": server_url, "token": token})
+    client = await connect_to_server({"server_url": server_url, "token": token})
 
     # Register the service
-    svc = await server.register_service(
+    svc = await client.register_service(
         {
             "name": name,
             "description": description,

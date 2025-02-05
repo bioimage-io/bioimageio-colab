@@ -279,8 +279,8 @@ const setAnnotationLayer = async ({ viewer, edgeColor, embeddingPromise, modelPr
                 }
                 // Segment the image and add the mask to the annotation layer
                 const results = await segmentImage({
-                    modelPromise: modelPromise,
-                    embeddingPromise: embeddingPromise,
+                    model: modelPromise,
+                    embedding: embeddingPromise,
                     coordinates: shape.geometry.coordinates,
                 })
                 annotationLayer = await addMaskToLayer({

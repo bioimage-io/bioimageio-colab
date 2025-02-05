@@ -163,15 +163,15 @@ const prepareModelData = ({ embeddingResult, coordinates }) => {
     };
 };
 
-const segmentImage = async ({ modelPromise, embeddingPromise, coordinates }) => {
-    const embeddingResult = await embeddingPromise;
+const segmentImage = async ({ model, embedding, coordinates }) => {
+    const embeddingResult = await embedding;
     const feeds = prepareModelData({
         embeddingResult: embeddingResult,
         coordinates: coordinates,
     });
     console.log("Feeds prepared for the model:", feeds);
-    const model = await modelPromise;
-    const results = await model.run(feeds);
+    const modelLoaded = await model;
+    const results = await modelLoaded.run(feeds);
     console.log("Model results:", results);
     return results;
 };
