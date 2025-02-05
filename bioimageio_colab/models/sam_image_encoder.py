@@ -37,7 +37,7 @@ class SamImageEncoder:
                 array = np.transpose(array, [1, 2, 0])
         else:
             raise ValueError(
-                f"Invalid input image of shape {array.shape}. Expected either 2-channel grayscale or 3-channel RGB image."
+                f"Invalid input image of shape {array.shape}. Expected either 2-channel (HxW) grayscale or 3-channel (HxWxC) RGB image."
             )
 
         assert (
