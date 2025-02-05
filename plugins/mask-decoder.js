@@ -19,30 +19,62 @@ const loadSamDecoder = async ({ modelID }) => {
     return modelPromise;
 };
 
-const createTensorFromUint8Array = ({ data, shape }) => {
-    const dst = new ArrayBuffer(data.byteLength);
-    new Uint8Array(dst).set(new Uint8Array(data));
-    return new ort.Tensor("float32", new Float32Array(dst), shape);
-};
-
 const createInputTensors = ({ embeddingFeatures, originalImageShape, samScale }) => {
+    // Check the embedding features
+    if (embeddingFeatures._rdtype !== "float32") {
+        throw new Error(`Invalid embedding features data type. Expected 'float32', but received '${embeddingFeatures._rdtype}'.`);
+    }
+
+    if (!(embeddingFeatures._rvalue instanceof Uint8Array)) {
+        throw new Error(`Invalid embedding features value. Expected an instance of Uint8Array, but received '${typeof embeddingFeatures._rvalue}'.`);
+    }
+
+    if (embeddingFeatures._rshape.length !== 4) {
+        throw new Error(`Invalid embedding features shape. Expected a 4-element array, but received '${embeddingFeatures._rshape.length}' elements.`);
+    }
+
+    const nEmbeddingElements = embeddingFeatures._rshape.reduce(
+        (accumulator, currentValue) => accumulator * currentValue, 1
+    );
+    if (embeddingFeatures._rvalue.byteLength !== nEmbeddingElements * 4) {
+        throw new Error(
+            `Mismatch in embedding size. Expected ${nEmbeddingElements * 4} bytes (for ${nEmbeddingElements} float32 elements), ` +
+            `but received ${embeddingFeatures._rvalue.byteLength} bytes.`
+        );
+    }
+
+    // Copy the embedding features to a new buffer to reset the byte offset
+    const newBuffer = new ArrayBuffer(embeddingFeatures._rvalue.byteLength);
+    new Uint8Array(newBuffer).set(embeddingFeatures._rvalue);
+
     // Create the embedding tensor
-    const embeddingTensor = createTensorFromUint8Array({
-        data: embeddingFeatures._rvalue,
-        shape: embeddingFeatures._rshape,
-    });
+    const embeddingTensor = new ort.Tensor(
+        "float32",
+        new Float32Array(newBuffer),
+        embeddingFeatures._rshape
+    );
+
+    // Check the original image shape
+    if (originalImageShape.length !== 2) {
+        throw new Error(`Invalid original image shape. Expected a 2-element array, but received '${originalImageShape.length}' elements.`);
+    }
 
     // Create the image size tensor
-    const imageSizeTensor = new ort.Tensor("float32", [
-        originalImageShape[0],
-        originalImageShape[1],
-    ]);
+    const imageSizeTensor = new ort.Tensor(
+        "float32",
+        [originalImageShape[0], originalImageShape[1]],
+    );
+
+    // Check the SAM scale
+    if (typeof samScale !== "number" || isNaN(samScale) || samScale <= 0) {
+        throw new Error(`Invalid SAM scale. Expected a positive number, but received '${samScale}'.`);
+    }
 
     // There is no previous mask, so default to an empty tensor
     const maskInput = new ort.Tensor(
         "float32",
         new Float32Array(256 * 256),
-        [1, 1, 256, 256]
+        [1, 1, 256, 256],
     );
     // There is no previous mask, so default to 0
     const hasMaskInput = new ort.Tensor("float32", [0]);
@@ -74,10 +106,21 @@ const computeEmbedding = async ({ samService, image, modelID }) => {
 };
 
 const prepareModelData = ({ embeddingResult, coordinates }) => {
-    let pointCoordsTensor;
-    let pointLabelsTensor;
+    // Check the coordinates
+    if (coordinates.length !== 2) {
+        console.error("Invalid coordinates. Expected a 2-element array, but received", coordinates);
+        return;
+    }
+    if (typeof coordinates[0] !== "number" || isNaN(coordinates[0]) || coordinates[0] < 0) {
+        console.error("Invalid x-coordinate. Expected a non-negative number, but received", coordinates[0]);
+        return;
+    }
+    if (typeof coordinates[1] !== "number" || isNaN(coordinates[1]) || coordinates[1] < 0) {
+        console.error("Invalid y-coordinate. Expected a non-negative number, but received", coordinates[1]);
+        return;
+    }
 
-    // Prepare input for the model
+    // Create click points
     const clicks = [{
         x: coordinates[0],
         y: coordinates[1],
@@ -85,34 +128,30 @@ const prepareModelData = ({ embeddingResult, coordinates }) => {
     }];
 
     // Check there are input click prompts
-    if (clicks) {
-        let n = clicks.length;
+    let n = clicks.length;
 
-        // If there is no box input, a single padding point with 
-        // label -1 and coordinates (0.0, 0.0) should be concatenated
-        // so initialize the array to support (n + 1) points.
-        pointCoords = new Float32Array(2 * (n + 1));
-        pointLabels = new Float32Array(n + 1);
+    // If there is no box input, a single padding point with 
+    // label -1 and coordinates (0.0, 0.0) should be concatenated
+    // so initialize the array to support (n + 1) points.
+    const pointCoords = new Float32Array(2 * (n + 1));
+    const pointLabels = new Float32Array(n + 1);
 
-        // Add clicks and scale to what SAM expects
-        for (let i = 0; i < n; i++) {
-            pointCoords[2 * i] = clicks[i].x * embeddingResult.samScale;
-            pointCoords[2 * i + 1] = clicks[i].y * embeddingResult.samScale;
-            pointLabels[i] = clicks[i].clickType;
-        }
-
-        // Add in the extra point/label when only clicks and no box
-        // The extra point is at (0, 0) with label -1
-        pointCoords[2 * n] = 0.0;
-        pointCoords[2 * n + 1] = 0.0;
-        pointLabels[n] = -1.0;
-
-        // Create the tensor
-        pointCoordsTensor = new ort.Tensor("float32", pointCoords, [1, n + 1, 2]);
-        pointLabelsTensor = new ort.Tensor("float32", pointLabels, [1, n + 1]);
+    // Add clicks and scale to what SAM expects
+    for (let i = 0; i < n; i++) {
+        pointCoords[2 * i] = clicks[i].x * embeddingResult.samScale;
+        pointCoords[2 * i + 1] = clicks[i].y * embeddingResult.samScale;
+        pointLabels[i] = clicks[i].clickType;
     }
-    if (pointCoordsTensor === undefined || pointLabelsTensor === undefined)
-        return;
+
+    // Add in the extra point/label when only clicks and no box
+    // The extra point is at (0, 0) with label -1
+    pointCoords[2 * n] = 0.0;
+    pointCoords[2 * n + 1] = 0.0;
+    pointLabels[n] = -1.0;
+
+    // Create the tensor
+    const pointCoordsTensor = new ort.Tensor("float32", pointCoords, [1, n + 1, 2]);
+    const pointLabelsTensor = new ort.Tensor("float32", pointLabels, [1, n + 1]);
 
     return {
         image_embeddings: embeddingResult.embeddingTensor,
@@ -124,31 +163,27 @@ const prepareModelData = ({ embeddingResult, coordinates }) => {
     };
 };
 
-const segmentImage = async ({ modelPromise, embeddingPromise, coordinates, }) => {
+const segmentImage = async ({ modelPromise, embeddingPromise, coordinates }) => {
     const embeddingResult = await embeddingPromise;
     const feeds = prepareModelData({
         embeddingResult: embeddingResult,
         coordinates: coordinates,
     });
     console.log("Feeds prepared for the model:", feeds);
-    if (feeds === undefined) {
-        console.log("No input data available for model.");
-        return;
-    }
     const model = await modelPromise;
     const results = await model.run(feeds);
     console.log("Model results:", results);
     return results;
 };
 
-const processMaskToGeoJSON = ({ masks }) => {
+const processMaskToGeoJSON = ({ masks, threshold = 0 }) => {
     // Dimensions of the mask (batch, channels, width, height)
     const [b, c, width, height] = masks.dims;
 
     // 1. Apply threshold to create binary mask
     const binaryMask = new Uint8Array(width * height);
     for (let i = 0; i < masks.data.length; i++) {
-        binaryMask[i] = masks.data[i] > 0.0 ? 255 : 0;
+        binaryMask[i] = masks.data[i] > threshold ? 255 : 0;
     }
 
     // Convert binaryMask to an OpenCV.js Mat
