@@ -2,34 +2,29 @@ import numpy as np
 import requests
 from hypha_rpc.sync import connect_to_server
 from tifffile import imread
+import os
 
 SERVER_URL = "https://hypha.aicell.io"
 WORKSPACE_NAME = "bioimageio-colab"
 SERVICE_ID = "microsam"
+CLIENT_ID = os.getenv("CLIENT_ID")
 MODEL_IDS = ["sam_vit_b", "sam_vit_b_lm", "sam_vit_b_em_organelles"]
 IMG_PATH = "./data/example_image.tif"
 
 
-def test_service_is_alive_http_api():
-    service_url = f"{SERVER_URL}/{WORKSPACE_NAME}/services/{SERVICE_ID}"
+def test_service_http_api():
+    client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
+    service_url = f"{SERVER_URL}/{WORKSPACE_NAME}/services/{client_str}{SERVICE_ID}"
 
-    response = requests.get(f"{service_url}/hello")
+    response = requests.get(f"{service_url}/hello?_mode=last")
     assert response.status_code == 200
     assert response.json() == "Welcome to the Interactive Segmentation service!"
 
-    response = requests.get(f"{service_url}/ping")
+    response = requests.get(f"{service_url}/ping?_mode=last")
     assert response.status_code == 200
     assert response.json() == "pong"
 
-
-def test_probes_http_api():
-    probes_url = f"{SERVER_URL}/{WORKSPACE_NAME}/services/probes"
-
-    response = requests.get(f"{probes_url}/readiness")
-    assert response.status_code == 200
-    assert response.json() == {"status": "ready"}
-
-    response = requests.get(f"{probes_url}/liveness")
+    response = requests.get(f"{service_url}/deployment_status?assert_status=True&_mode=last")
     assert response.status_code == 200
     for value in response.json().values():
         assert value["status"] == "RUNNING"
@@ -42,8 +37,9 @@ def test_service_python_api():
     client = connect_to_server({"server_url": SERVER_URL, "method_timeout": 5})
     assert client
 
-    sid = f"{WORKSPACE_NAME}/{SERVICE_ID}"
-    service = client.get_service(sid, {"mode": "random"})
+    client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
+    sid = f"{WORKSPACE_NAME}/{client_str}{SERVICE_ID}"
+    service = client.get_service(sid, {"mode": "last"})
     assert service.config.workspace == WORKSPACE_NAME
 
     # Test service functions
@@ -64,9 +60,15 @@ def test_service_python_api():
         assert isinstance(embedding, np.ndarray)
         assert embedding.shape == (1, 256, 64, 64)
 
-        input_size = result["input_size"]
-        assert isinstance(input_size, list)
-        assert len(input_size) == 2
+        original_image_shape = result["original_image_shape"]
+        assert isinstance(original_image_shape, list)
+        assert original_image_shape == [512, 512]
+
+        sam_scale = result["sam_scale"]
+        assert isinstance(sam_scale, float)
+        assert sam_scale == 2.0
+
+
 
     # Test mask computation
     # polygon_features = service.compute_mask(

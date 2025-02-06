@@ -3,13 +3,13 @@ import os
 from datetime import datetime, timezone
 from functools import partial
 
+import asyncio
 import numpy as np
 import ray
 from dotenv import find_dotenv, load_dotenv
 from hypha_rpc import connect_to_server
-from hypha_rpc.rpc import RemoteService
+
 # from kaibu_utils import mask_to_features
-from ray.serve.config import AutoscalingConfig
 from tifffile import imread
 
 from bioimageio_colab.models import SAM_MODELS, SamDeployment
@@ -49,6 +49,7 @@ def parse_requirements(file_path) -> list:
 
 
 def connect_to_ray(address: str = None) -> None:
+    logger.info("Connecting to Ray...")
     # Create runtime environment
     sam_requirements = parse_requirements(
         os.path.join(BASE_DIR, "requirements-sam.txt")
@@ -71,8 +72,9 @@ def connect_to_ray(address: str = None) -> None:
 async def deploy_to_ray(
     cache_dir: str,
     app_name: str = "SAM Image Encoder",
-    min_replicas: int = 1,
-    max_replicas: int = 2,
+    num_replicas: int = 2,
+    max_queued_requests: int = 10,
+    restart_deployment: bool = False,
     skip_test_runs: bool = False,
 ) -> None:
     """
@@ -83,15 +85,15 @@ async def deploy_to_ray(
     Returns:
         dict: Handles to the deployed image encoders.
     """
-    # Set autoscaling configuration
-    autoscaling_config = AutoscalingConfig(
-        min_replicas=min_replicas,
-        max_replicas=max_replicas,
+    logger.info(
+        f"Deploying the app '{app_name}' with {num_replicas} replicas on Ray Serve..."
     )
 
     # Create a new Ray Serve deployment
     deployment = SamDeployment.options(
-        autoscaling_config=autoscaling_config,
+        num_replicas=num_replicas,
+        max_replicas_per_node=1,
+        max_queued_requests=max_queued_requests,
     )
 
     # Bind the arguments to the deployment and return an Application.
@@ -101,23 +103,35 @@ async def deploy_to_ray(
     serve_status = ray.serve.status()
     applications = serve_status.applications
 
-    if app_name in applications:
+    if app_name in applications and restart_deployment:
         # Delete the existing application
         ray.serve.delete(app_name)
         logger.info(f"Deleted existing application '{app_name}'")
 
     # Deploy the application
     ray.serve.run(app, name=app_name, route_prefix=None)
-    logger.info(f"Deployed application '{app_name}'.")
 
-    if not skip_test_runs:
+    # Get the application handle
+    app_handle = ray.serve.get_app_handle(name=app_name)
+    if not app_handle:
+        raise ConnectionError("Failed to get the application handle.")
+
+    if app_name in applications:
+        logger.info(f"Updated application deployment '{app_name}'.")
+    else:
+        logger.info(f"Deployed application '{app_name}'.")
+
+    if skip_test_runs:
+        logger.info("Skipping test runs for each model.")
+    else:
         # Test run each model
-        handle = ray.serve.get_app_handle(name=app_name)
         img_file = os.path.join(BASE_DIR, "data/example_image.tif")
         image = imread(img_file)
         for model_id in SAM_MODELS.keys():
-            await handle.remote(model_id=model_id, array=image)
+            await app_handle.options(multiplexed_model_id=model_id).remote(image)
             logger.info(f"Test run for model '{model_id}' completed successfully.")
+
+    return app_handle
 
 
 def hello(context: dict = None) -> str:
@@ -129,9 +143,10 @@ def ping(context: dict = None) -> str:
 
 
 async def compute_image_embedding(
-    app_name: str,
     image: np.ndarray,
     model_id: str,
+    app_handle: ray.serve.handle.DeploymentHandle,
+    semaphore: asyncio.Semaphore,
     require_login: bool = False,
     context: dict = None,
 ) -> dict:
@@ -142,20 +157,25 @@ async def compute_image_embedding(
         user = context["user"]
         if require_login and user["is_anonymous"]:
             raise PermissionError("You must be logged in to use this service.")
-
         user_id = user["id"]
-        logger.info(
-            f"User '{user_id}' - Computing embedding (model: '{model_id}')..."
-        )
 
-        # Compute the embedding
-        # Returns: {"features": embedding, "input_size": input_size}
-        handle = ray.serve.get_app_handle(name=app_name)
-        result = await handle.remote(model_id=model_id, array=image)
+        # Put image immediately into the object store to avoid memory issues
+        logger.info(f"User '{user_id}' - Putting image into the object store...")
+        obj_ref = ray.put(image)
+        del image
 
-        logger.info(f"User '{user_id}' - Embedding computed successfully.")
-
-        return result
+        # Compute the embedding, but limit the number of concurrent requests
+        async with semaphore:
+            logger.info(
+                f"User '{user_id}' - Computing embedding (model: '{model_id}')..."
+            )
+            
+            # Format: {"features": embedding, "input_size": input_size}
+            result = await app_handle.options(multiplexed_model_id=model_id).remote(
+                obj_ref
+            )
+            logger.info(f"User '{user_id}' - Embedding computed successfully.")
+            return result
     except Exception as e:
         logger.error(f"User '{user_id}' - Error computing embedding: {e}")
         raise e
@@ -216,25 +236,6 @@ async def compute_image_embedding(
 #         raise e
 
 
-async def check_readiness(client: RemoteService, service_id: str) -> dict:
-    """
-    Readiness probe for the SAM service.
-    """
-    logger.info("Checking the readiness of the SAM service...")
-
-    services = await client.list_services()
-    service_found = False
-    for service in services:
-        if service["id"] == service_id:
-            service_found = True
-            break
-    assert service_found, f"Service with ID '{service_id}' not found."
-
-    logger.info(f"Service with ID '{service_id}' is ready.")
-
-    return {"status": "ready"}
-
-
 def format_time(last_deployed_time_s, tz: timezone = timezone.utc) -> str:
     # Get the current time
     current_time = datetime.now(tz)
@@ -269,44 +270,52 @@ def format_time(last_deployed_time_s, tz: timezone = timezone.utc) -> str:
     }
 
 
-async def check_liveness(app_name: str, client: RemoteService, service_id: str) -> dict:
+async def deployment_status(
+    app_name: str, service_id: str, registration_time_s: float, assert_status: bool = False, context: dict = None
+) -> dict:
     """
-    Liveness probe for the SAM service.
+    Check the status of the Ray Serve application and deployments.
     """
-    logger.info(f"Checking the liveness of the SAM service...")
-    output = {}
+    try:
+        output = {}
 
-    # Check the Ray Serve application status
-    serve_status = ray.serve.status()
-    application = serve_status.applications[app_name]
-    assert application.status == "RUNNING"
-    formatted_time = format_time(application.last_deployed_time_s)
-    output[f"application: {app_name}"] = {
-        "status": application.status.value,
-        "last_deployed_at": formatted_time["last_deployed_at"],
-        "duration_since": formatted_time["duration_since"],
-    }
-
-    for name, deployment in serve_status.applications[app_name].deployments.items():
-        assert deployment.status == "HEALTHY"
-        # assert deployment.replica_states == {"RUNNING": 1}
-        output[f"application: {app_name}"][f"deployment: {name}"] = {
-            "status": deployment.status.value,
-            # "replica_states": deployment.replica_states,
+        # Check the Ray Serve application status
+        serve_status = ray.serve.status()
+        application = serve_status.applications[app_name]
+        formatted_time = format_time(application.last_deployed_time_s)
+        output[f"application: {app_name}"] = {
+            "status": application.status.value,
+            "last_deployed_at": formatted_time["last_deployed_at"],
+            "duration_since": formatted_time["duration_since"],
         }
 
-    # Check if the service can be accessed
-    service = await client.get_service(service_id)
-    assert await service.ping() == "pong"
+        deployments = application.deployments
+        for name, deployment in deployments.items():
+            output[f"application: {app_name}"][f"deployment: {name}"] = {
+                "status": deployment.status.value,
+                "replica_states": deployment.replica_states,
+            }
 
-    output["service"] = {
-        "status": "RUNNING",
-        "service_id": service_id,
-    }
+        # Check the Hypha service status
+        formatted_time = format_time(registration_time_s)
+        output["hypha_service"] = {
+            "status": "RUNNING",
+            "service_id": service_id,
+            "last_registered_at": formatted_time["last_deployed_at"],
+            "duration_since": formatted_time["duration_since"],
+        }
 
-    logger.info(f"Service with ID '{service_id}' is live.")
+        # Assert the status of the application and deployments
+        if assert_status:
+            assert application.status == "RUNNING"
+            for deployment in deployments.values():
+                assert deployment.status == "HEALTHY"
+                assert deployment.replica_states["RUNNING"] > 0
 
-    return output
+        return output
+    except Exception as e:
+        logger.error(f"Error checking deployment status: {e}")
+        raise e
 
 
 async def register_service(args: dict) -> None:
@@ -341,13 +350,24 @@ async def register_service(args: dict) -> None:
     # Deploy SAM image encoders
     cache_dir = os.path.abspath(args.cache_dir)
     app_name = "SAM Image Encoder"
-    await deploy_to_ray(
+    app_handle = await deploy_to_ray(
         cache_dir=cache_dir,
         app_name=app_name,
+        num_replicas=args.num_replicas,
+        max_queued_requests=args.max_concurrent_requests,
+        restart_deployment=args.restart_deployment,
         skip_test_runs=args.skip_test_runs,
     )
 
     # Register a new service
+    semaphore = asyncio.Semaphore(args.max_concurrent_requests)
+    logger.info(
+        f"Created semaphore for {args.max_concurrent_requests} concurrent requests."
+    )
+
+    logger.info(
+        f"Registering the SAM service: ID='{args.service_id}', require_login={args.require_login}"
+    )
     service_info = await client.register_service(
         {
             "name": "Interactive Segmentation",
@@ -360,9 +380,16 @@ async def register_service(args: dict) -> None:
             # Exposed functions:
             "hello": hello,
             "ping": ping,
+            "deployment_status": partial(
+                deployment_status,
+                app_name=app_name,
+                service_id=f"{workspace}/{client_id}:{args.service_id}",
+                registration_time_s=datetime.now(timezone.utc).timestamp(),
+            ),
             "compute_embedding": partial(
                 compute_image_embedding,
-                app_name=app_name,
+                app_handle=app_handle,
+                semaphore=semaphore,
                 require_login=args.require_login,
             ),
             # "compute_mask": partial(
@@ -375,26 +402,10 @@ async def register_service(args: dict) -> None:
     sid = service_info["id"]
     logger.info(f"Service registered with ID: {sid}")
     logger.info(f"Test the service here: {client_base_url}:{args.service_id}/hello")
-
-    # Register probes for the service
-    await client.register_probes(
-        {
-            "readiness": partial(
-                check_readiness,
-                client=client,
-                service_id=sid,
-            ),
-            "liveness": partial(
-                check_liveness,
-                app_name=app_name,
-                client=client,
-                service_id=sid,
-            ),
-        }
-    )
-
-    # This will register probes service where you can accessed via hypha or the HTTP proxy
-    logger.info(f"Probes registered at workspace: {workspace}")
     logger.info(
-        f"Test the liveness probe here: {args.server_url}/{workspace}/services/probes/liveness"
+        f"Check deployment status: {client_base_url}:{args.service_id}/deployment_status"
     )
+
+    # Save the service ID to a file - indicates readiness
+    with open(os.path.join(BASE_DIR, "service_id.txt"), "w") as file:
+        file.write(sid)

@@ -1,0 +1,37 @@
+# Ignore Python cache & environment files
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+.env
+
+# Ignore system & IDE files
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Ignore version control & build files
+.git/
+.github/
+.gitignore
+MANIFEST.in
+
+# Ignore documentation, tests, notebooks and plugins
+docs/
+notebooks/
+tests/
+plugins/
+
+# Ignore data files
+data/**/*.bin
+data/**/*.onnx
+data/**/*.png
+
+# Ignore Docker & Compose files (not needed inside the image)
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# Ignore project metadata & readme (unless needed)
+README.md
