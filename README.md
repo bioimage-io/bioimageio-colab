@@ -30,7 +30,7 @@ Load these requirements:
 <script src="https://docs.opencv.org/4.5.0/opencv.js">
 
 <!-- SAM Mask Decoder -->
-<script src="https://cdn.jsdelivr.net/gh/bioimage-io/bioimageio-colab@latest/plugins/mask-decoder.js">
+<script src="https://cdn.jsdelivr.net/gh/bioimage-io/bioimageio-colab@latest/plugins/onnx-mask-decoder.js">
 ```
 
 Connect to the BioEngine:
