@@ -28,8 +28,4 @@ jobs:
           echo "Error: Version in pyproject.toml was not updated (still $CURRENT_VERSION)."
           exit 1
         fi
-        echo "Version updated successfully! ($BASE_VERSION → $CURRENT_VERSION)"
-
-    - name: Approve if version updated
-      if: ${{ success() }}
-      run: echo "Version check passed! Version updated from $BASE_VERSION to $CURRENT_VERSION."
+        echo "::notice ::Version check passed! Version updated from $BASE_VERSION to $CURRENT_VERSION."
