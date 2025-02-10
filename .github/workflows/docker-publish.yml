@@ -3,8 +3,9 @@ name: Build and Publish Docker Image
 on:
   push:
     branches:
-      - main  # Trigger the workflow on pushes to the main branch
+      - main
     paths:
+      - '.github/workflows/docker-publish.yml'
       - 'bioimageio_colab/**'
       - 'data/**'
       - 'scripts/**'

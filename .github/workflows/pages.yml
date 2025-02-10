@@ -2,10 +2,11 @@ name: Deploy GitHub Pages
 
 on:
   push:
-    paths:
-      - 'docs/**'  # Only trigger when files in docs/ change
     branches:
-      - main  # Ensure it runs only on the main branch
+      - main
+    paths:
+      - '.github/workflows/pages.yml'
+      - 'docs/**'
 
 jobs:
   deploy:
