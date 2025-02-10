@@ -2,24 +2,36 @@
 
 This is a work-in-progress project to support **collaborative data annotation in the browser using the BioEngine and Kaibu**. It allows the safe dissemination of images embedded in an image annotation tool (Kaibu) and storing the corresponding annotation in a source directory. This functionality is enabled by the connection to the BioEngine server.
 
-### Collaborative annotation powered by Segment Anything Model (SAM)
+### 🚀 Try the Interactive Demo!
 
-We support using the Segment Anything Model (SAM) to facilitate the annotation of images for segmentation. To try it, open the [demo](https://imjoy.io/lite?plugin=https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/refs/heads/main/plugins/bioimageio-colab-annotator.imjoy.html) with an example image.
+Experience the power of the Segment Anything Model (SAM) in your browser: [Launch Demo](https://imjoy.io/lite?plugin=https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/refs/heads/main/plugins/bioimageio-colab-annotator.imjoy.html). This demo showcases interactive segmentation with SAM on an example image.
+
+For collaborative annotation sessions with your own data and the ability to save annotations, visit our [Web Interface](https://bioimage-io.github.io/bioimageio-colab/).
 
 ### Components
 
-BioImageIO Colab is based on two main components: Kaibu (a web-browser annotation tool) and the BioEngine. The BioEngine provides a framework in which different clients (the "Data Provider" and the "Collaborators") are connected to a common server (the BioEngine server) in a way that makes it possible to transfer data and interfaces without installation.
+BioImageIO Colab combines two powerful tools:
+- **Kaibu**: A web-based annotation tool
+- **BioEngine**: A server framework that connects "Data Provider" and "Collaborators"
 
-These are the components to consider when designing your collaborative annotation:
-- **The information you want to send and retrieve in the process**: For example, the images you want to send to other clients through the server and the information you want to recover after a client annotates the images.
-  The "Data Provider" registers two functions to the BioEngine, one to load a random image from the provided list of images (`get_random_image`) and another to save the annotation back to the "Data Provider" (`save_annotation`). These functions are defined in [docs/data_providing_service.py](https://github.com/bioimage-io/bioimageio-colab/blob/main/docs/data_providing_service.py). This can be done through the web UI at [bioimage-io.github.io/bioimageio-colab/](https://bioimage-io.github.io/bioimageio-colab/).
+#### Key Components for Collaborative Annotation
 
-- The **interactive ImJoy plugin** takes care of the images provided by the host client and the input from the "Collaborators". This [plugin](https://github.com/bioimage-io/bioimageio-colab/blob/main/plugins/bioimageio-colab-annotator.imjoy.html) is an `html` file and can be loaded using [imjoy.io](https://imjoy.io/lite). A link with a configuration to connect to the "Data Provider" service is returned in the [web UI](https://bioimage-io.github.io/bioimageio-colab/).
+1. **Data Flow Configuration**
+   - Images are sent from Data Provider to Collaborators
+   - Annotations are sent back to Data Provider
+   - Two main functions: `get_random_image` and `save_annotation`
+   - Set up through [Web Interface](https://bioimage-io.github.io/bioimageio-colab/)
+   - Implementation in [docs/data_providing_service.py](https://github.com/bioimage-io/bioimageio-colab/blob/main/docs/data_providing_service.py)
 
-### Integrate the SAM compute service into your own project
+2. **Interactive Interface**
+   - ImJoy plugin handles image display and annotation
+   - Connects to Data Provider service
+   - Available as [plugin](https://github.com/bioimage-io/bioimageio-colab/blob/main/plugins/bioimageio-colab-annotator.imjoy.html)
 
-Load these requirements:
-```
+### Integrate SAM Compute Service
+
+#### Required Dependencies
+```html
 <!-- Hypha RPC WebSocket -->
 <script src="https://cdn.jsdelivr.net/npm/hypha-rpc@0.20.47/dist/hypha-rpc-websocket.min.js">
 
@@ -33,7 +45,9 @@ Load these requirements:
 <script src="https://cdn.jsdelivr.net/gh/bioimage-io/bioimageio-colab@latest/plugins/onnx-mask-decoder.js">
 ```
 
-Connect to the BioEngine:
+#### Integration Steps
+
+1. **Connect to BioEngine**
 ```javascript
 const client = await hyphaWebsocketClient.connectToServer({
     server_url: "https://hypha.aicell.io",
@@ -42,29 +56,25 @@ samService = await client.getService("bioimageio-colab/microsam", { mode: "last"
 dataService = await client.getService("<your_data_service_id>");
 ```
 
-Load the SAM decoder as an ONNX model. Currently, `sam_vit_b_lm` and `sam_vit_b_em_organelles` are available models:
+2. **Load SAM Model**
 ```javascript
-const modelID = "sam_vit_b_lm";
+const modelID = "sam_vit_b_lm"; // or "sam_vit_b_em_organelles"
 modelPromise = loadSamDecoder({ modelID: modelID });
 ```
-Working with promises allows the model to be loaded in the background. Simply `await` the promise to get the ONNX model.
 
-Load an image from the data service:
+3. **Process Images**
 ```javascript
+// Load image
 const image = await dataService.get_random_image();
-```
 
-Compute the image embedding using the provided SAM compute service. This only needs to be done once for every new image:
-```javascript
+// Compute embedding (once per image)
 embeddingPromise = computeEmbedding({
     samService: samService,
     image: image,
     modelID: modelID,
 });
-```
 
-Given a prompt with point coordinates, `segmentImage` will use the SAM mask decoder and the image embedding to segment the image at the given position. `segmentImage` can handle both pending and awaited promises:
-```javascript
+// Segment with point prompt
 const coordinates = [63, 104];
 const results = await segmentImage({
     model: modelPromise,
@@ -72,13 +82,10 @@ const results = await segmentImage({
     coordinates: coordinates,
 });
 const mask = results["masks"];
-```
 
-The received mask still needs to be processed in order to be used in Kaibu. `processMaskToGeoJSON` first applies a threshold to create a binary mask and then uses OpenCV to find contours and extract x and y coordinates of a closed polygon:
-```javascript
+// Convert to GeoJSON format
 const polygonCoords = processMaskToGeoJSON({
     masks: mask,
     threshold: 0,
 });
 ```
-The threshold can be adjusted as needed.
