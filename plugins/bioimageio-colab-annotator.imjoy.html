@@ -14,22 +14,326 @@
   "env": "",
   "permissions": [],
   "requirements": [
-    "https://cdn.jsdelivr.net/npm/hypha-rpc@latest/dist/hypha-rpc-websocket.min.js"
+    "https://cdn.jsdelivr.net/npm/hypha-rpc@0.20.47/dist/hypha-rpc-websocket.min.js",
+    "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js",
+    "https://docs.opencv.org/4.5.0/opencv.js",
+    "https://cdn.jsdelivr.net/gh/bioimage-io/bioimageio-colab@latest/plugins/onnx-mask-decoder.js"
   ],
   "dependencies": []
 }
 </config>
 
 <script lang="javascript">
+// Define example images
+let exampleImages = [
+    {
+        name: "HPA_cells",
+        imageUrl: "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image.png",
+        modelID: "sam_vit_b_lm",
+        embeddingUrl: "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image_sam_vit_b_lm.bin",
+        embeddingShape: [1, 256, 64, 64],
+        samScale: 2.0
+    }
+];
+
+const getServices = async (ctx) => {
+    // Extract configuration settings and check if they are valid
+    const config = ctx.config || {};
+    config.serverUrl = config.serverUrl || "https://hypha.aicell.io";
+    config.token = config.token || null;
+    config.imageProviderId = config.imageProviderId || null;
+    config.samServiceId = config.samServiceId || "bioimageio-colab/microsam";
+
+    // Connect to the Hypha server
+    console.log(`Connecting to server ${config.serverUrl}...`);
+    await api.showMessage(`Connecting to server ${config.serverUrl}...`);
+    const server = await hyphaWebsocketClient.connectToServer({
+        server_url: config.serverUrl,
+        token: config.token,
+    });
+
+    // Get the current workspace and user ID
+    const currentWorkspace = server.config.user.scope.current_workspace;
+    const userID = server.config.user.id;
+    console.log(`Connected to workspace ${currentWorkspace} as user ${userID}.`);
+
+    let dataService = null;
+    let samService = null;
+
+    if (config.imageProviderId) {
+        // Get the image provider service from the server
+        try {
+            dataService = await server.getService(config.imageProviderId);
+            console.log(`Received image provider service with ID: ${config.imageProviderId}`);
+        } catch (e) {
+            console.error(e);
+            await api.alert(
+                `The image provider cannot be reached (ID: ${config.imageProviderId}). Please check if the service is running.`
+            );
+        }
+    } else {
+        const msg = "No annotation service ID provided in the configuration. Using example image.";
+        console.log(msg);
+        await api.alert(msg);
+    }
+
+    // Get the SAM service from the server
+    try {
+        samService = await server.getService(config.samServiceId, { mode: "last" });
+        console.log(`Received SAM service with ID: ${config.samServiceId}`);
+    } catch (e) {
+        samService = null;
+        console.error(e);
+        await api.alert(
+            `The SAM service is currently not reachable (ID: ${config.samServiceId}). Please wait a few minutes and reload the page to try again.`,
+            { duration: 6000 }
+        );
+    }
+
+    // Return the services
+    return [dataService, samService];
+};
+
+const convertImage = ({ pixelArray, width, height }) => {
+    let rgbArray;
+    const nPixels = width * height;
+
+    // Check the input data
+    if (!(pixelArray instanceof Uint8Array)) {
+        throw new Error(`Invalid pixel data. Expected an instance of Uint8Array, but received '${typeof pixelArray}'.`);
+    }
+    if (pixelArray.length === nPixels * 4) {
+        console.log("Converting RGBA image to RGB...");
+        rgbArray = new Uint8Array(nPixels * 3);
+        for (let i = 0; i < nPixels; i++) {
+            rgbArray[3 * i] = pixelArray[4 * i];
+            rgbArray[3 * i + 1] = pixelArray[4 * i + 1];
+            rgbArray[3 * i + 2] = pixelArray[4 * i + 2];
+        }
+    } else if (pixelArray.length === nPixels * 3) {
+        rgbArray = pixelArray;
+    } else {
+        throw new Error(`Mismatch in pixel data size. Expected ${width * height * 3} bytes, but received ${pixelArray.length} bytes.`);
+    }
+
+    // Create the hypha-rpc representation of the image
+    const image = {
+        _rtype: "ndarray",
+        _rvalue: rgbArray,
+        _rshape: [width, height, 3],
+        _rdtype: "uint8",
+    };
+    return image;
+};
+
+const loadExampleImage = async ({ url }) => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';  // To handle CORS for external images
+        img.src = url;
+
+        img.onload = () => {
+            const width = img.width;
+            const height = img.height;
+
+            // Create an off-screen canvas to draw the image
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+
+            // Extract the pixel data (RGBA)
+            const imageData = ctx.getImageData(0, 0, width, height);
+
+            const image = convertImage({
+                pixelArray: new Uint8Array(imageData.data),
+                width: width,
+                height: height,
+            });
+            resolve(image);
+        };
+
+        img.onerror = (error) => {
+            reject(`Failed to load image from ${url}: ${error}`);
+        };
+    });
+};
+
+const setImageLayer = async ({ viewer, dataService }) => {
+    let image;
+    let filename;
+    if (dataService) {
+        // Fetch a random image from the data provider if available
+        console.log("Loading random image from the data provider...");
+        [image, filename] = await dataService.get_random_image();
+
+    } else {
+        // Load an example image if no data provider is available
+        console.log("Loading example image...");
+        const exampleImage = exampleImages[0];
+        // image = exampleImage.imageUrl;
+        image = await loadExampleImage({ url: exampleImage.imageUrl });
+        filename = exampleImage.name;
+    }
+    let imageLayer = await viewer.view_image(image, { name: filename });
+    console.log("Image displayed:", filename);
+
+    return imageLayer;
+};
+
+const getImageFromLayer = async ({ imageLayer }) => {
+    const vtkImage = await imageLayer.get_image();
+    const pointData = await vtkImage.getPointData()
+    const scalars = await pointData.getScalars();
+
+    // Pixel data
+    let pixelArray = await scalars.getData();
+
+    // Dimensions
+    const dimensions = await vtkImage.getDimensions();
+    const width = dimensions[0];
+    const height = dimensions[1];
+
+    const image = convertImage({
+        pixelArray: pixelArray,
+        width: width,
+        height: height,
+    });
+    console.log("Image data extracted from the layer:", image);
+    return image;
+};
+
+const loadPrecomputedEmbedding = async ({ image }) => {
+    // Load the precomputed embedding for the example image
+    const exampleImage = exampleImages[0];
+
+    const embeddingPromise = fetch(exampleImage.embeddingUrl)
+        .then(response => response.arrayBuffer())
+        .then(arrayBuffer => {
+            console.log("Received precomputed embedding from:", exampleImage.embeddingUrl);
+            const embeddingFeatures = {
+                _rvalue: new Uint8Array(arrayBuffer),
+                _rshape: exampleImage.embeddingShape,
+                _rdtype: "float32",
+            };
+            const inputTensors = createInputTensors({
+                embeddingFeatures: embeddingFeatures,
+                originalImageShape: image._rshape.slice(0, 2),
+                samScale: exampleImage.samScale,
+            });
+            console.log("Input tensors created:", inputTensors);
+            return inputTensors;
+        })
+        .catch(error => {
+            // Catch any errors during the embedding calculation or tensor preparation
+            console.error("An error occurred while preparing the embedding:", error);
+            throw error; // Propagate the error to be handled later
+        });
+
+    return embeddingPromise;
+};
+
+const addMaskToLayer = async ({ annotationLayer, masks, edgeColor }) => {
+    // Process the masks into GeoJSON-compatible features
+    const features = processMaskToGeoJSON({ masks: masks });
+
+    // Add the segmented features as polygons to the annotation layer
+    for (let coords of features) {
+        const polygon = {
+            type: "Feature",
+            coordinates: coords,
+            geometry: {
+                type: "Polygon",
+                coordinates: [coords],
+            },
+            properties: {
+                edge_color: edgeColor,
+                edge_width: 2,
+                size: 7,
+            },
+        };
+        annotationLayer.add_feature(polygon);
+    }
+
+    return annotationLayer;
+};
+
+const setAnnotationLayer = async ({ viewer, edgeColor, embeddingPromise, modelPromise }) => {
+    // Add the annotation functionality to the interface
+    let annotationLayer
+    annotationLayer = await viewer.add_shapes([], {
+        shape_type: "polygon",
+        draw_edge_color: edgeColor,
+        name: "annotation",
+        _rintf: true,
+        // Callback for adding a new feature (annotation point)
+        add_feature_callback: async (shape) => {
+            if (shape.geometry.type === "Point") {
+                if (!embeddingPromise) {
+                    const msg = "No SAM service available. Segmentation was skipped.";
+                    console.log(msg);
+                    await api.showMessage(msg);
+                    return;
+                }
+                // Segment the image and add the mask to the annotation layer
+                const results = await segmentImage({
+                    model: modelPromise,
+                    embedding: embeddingPromise,
+                    coordinates: shape.geometry.coordinates,
+                })
+                annotationLayer = await addMaskToLayer({
+                    annotationLayer: annotationLayer,
+                    masks: results["masks"],
+                    edgeColor: edgeColor,
+                });
+            }
+        }
+    });
+    return annotationLayer;
+};
+
+const saveAnnotation = async ({ dataService, imageLayer, annotationLayer }) => {
+    // Do not save if no data service or annotation layer is available
+
+    if (!dataService) {
+        const msg = "No data service provided. Saving was skipped.";
+        console.log(msg);
+        await api.showMessage(msg);
+        return;
+    }
+    // Get the annotation features from the layer
+    if (!annotationLayer) {
+        const msg = "No annotation provided. Saving was skipped.";
+        console.log(msg);
+        await api.showMessage(msg);
+        return;
+    }
+    const annotation = await annotationLayer.get_features();
+    if (annotation.features.length > 0) {
+        const image = await imageLayer.get_image();
+        const dimensions = await image.getDimensions();
+        await dataService.save_annotation(filename, annotation, [dimensions[0], dimensions[1]]);
+        const msg = "Annotation saved.";
+        console.log(msg);
+        await api.showMessage(msg);
+    } else {
+        const msg = "No annotation provided. Saving was skipped.";
+        console.log(msg);
+        await api.showMessage(msg);
+    }
+};
+
+
+// Define the BioImageIOColabAnnotator class
 class BioImageIOColabAnnotator {
     constructor() {
-        this.image = null; // Current image
-        this.mask = null; // Current mask
-        this.filename = null; // Filename of the current image
         this.imageLayer = null; // Layer displaying the image
         this.annotationLayer = null; // Layer displaying the annotations
         this.edgeColor = "magenta"; // Default edge color for annotations
-        this.modelName = "vit_b_lm"; // Model name for the embeddings
+        this.modelID = "sam_vit_b_lm"; // Model name for the embedding
+        this.modelPromise = null; // Promise for loading the model
     }
 
     async setup() {
@@ -37,144 +341,56 @@ class BioImageIOColabAnnotator {
     }
 
     async run(ctx) {
-        // Extract configuration settings
-        const config = ctx.config || {};
-        const serverUrl = config.server_url || "https://hypha.aicell.io";
-        const workspace = config.workspace;
-        const token = config.token;
-        const annotationServiceId = config.annotation_service_id;
-        if(!annotationServiceId){
-            await api.alert("Please provide the annotation service ID in the configuration.");
-            return;
-        }
-        const samServiceId = "bioimageio-colab/microsam";
-        
         // Create and display the viewer window
-        const viewer = await api.createWindow({src: "https://kaibu.org/#/app", fullscreen: true});
-        await api.showMessage(`Connecting to server ${serverUrl}...`);
-        // Login before connecting and then use userid
-        // TODO: Add login functionality
+        const viewer = await api.createWindow({ src: "https://kaibu.org/#/app", fullscreen: true });
 
-        // Connect to the Hypha server
-        const server = await hyphaWebsocketClient.connectToServer({
-            server_url: serverUrl,
-            token: token,
-            workspace: workspace,
-        });
+        // Get the services
+        const [dataService, samService] = await getServices(ctx);
 
-        // Get the user ID
-        const userID = server.config.user.id;
-        await api.showMessage(`Connected to workspace ${server.config.user.scope.current_workspace} as user ${userID}.`);
-
-        // Get the bioimageio-colab service from the server
-        let dataProvider;
-        try {
-            dataProvider = await server.getService(annotationServiceId);
-        } catch (e) {
-            await api.alert(`Failed to get the bioimageio-colab annotation service (id=${annotationServiceId}). (Error: ${e})`);
-            return;
-        }
-
-        // Get the SAM service from the server
-        let samService;
-        try {
-            samService = await server.getService(samServiceId, {"mode": "random"});
-        } catch (e) {
-            samService = null;
-            await api.showMessage(`Failed to get the bioimageio-colab SAM service (id=${samServiceId}). Please try again later.`);
-        }
-
-        // Flag to check if the image embedding is already calculated
-        let embeddingIsCalculated = false; 
-
-        // Function to get a new image and set up the viewer
-        const getImage = async () => {
-            if (this.image !== null) {
-                // Remove existing layers if there is any image loaded
-                await viewer.remove_layer({id: this.imageLayer.id});
-                await viewer.remove_layer({id: this.annotationLayer.id});
-            }
-
-            // Fetch a random image from the service
-            [this.image, this.filename] = await dataProvider.get_random_image();
-            this.imageLayer = await viewer.view_image(this.image, {name: "image"});
-
-            // Clear any previous image embeddings from the SAM service
-            if (samService) {
-                embeddingIsCalculated = false;
-                await samService.clear_cache();
-            }
-
-            // Add the annotation functionality to the interface
-            this.annotationLayer = await viewer.add_shapes([], {
-                shape_type: "polygon",
-                draw_edge_color: this.edgeColor,
-                name: "annotation",
-                _rintf: true,
-                // Callback for adding a new feature (annotation point)
-                add_feature_callback: async (shape) => {
-                    if (shape.geometry.type === "Point") {
-                        if (samService) {
-                            // The point coordinates need to be reversed to match the coordinate convention of SAM
-                            const pointCoords = [shape.geometry.coordinates.reverse()];
-                            const pointLabels = pointCoords.map(() => 1); // All points have a label of 1
-                            let features = [];
-
-                            // Compute embeddings if not already computed for the image
-                            try {
-                                if (!embeddingIsCalculated) {
-                                    await api.showMessage("Computing embedding and segmenting image...");
-                                } else {
-                                    await api.showMessage("Segmenting...");
-                                }
-                                features = await samService.segment(this.modelName, this.image, pointCoords, pointLabels);
-                                embeddingIsCalculated = true;
-                            } catch (e) {
-                                await api.showMessage(`Failed to compute the image embedding. (Error: ${e})`);
-                                return;
-                            }
-
-                            // Add the segmented features as polygons to the annotation layer
-                            for (let coords of features) {
-                                const polygon = {
-                                    type: "Feature",
-                                    coordinates: coords,
-                                    geometry: {
-                                        type: "Polygon",
-                                        coordinates: [coords],
-                                    },
-                                    properties: {
-                                        edge_color: this.edgeColor,
-                                        edge_width: 2,
-                                        size: 7,
-                                    },
-                                };
-                                this.annotationLayer.add_feature(polygon);
-                            }
-                        } else {
-                            await api.showMessage("Warning: SAM service not available. Please try again later.");
-                        }
-                    }
-                }
-            });
+        const setModel = async () => {
+            // Load the decoder for the selected model
+            this.modelPromise = loadSamDecoder({ modelID: this.modelID });
         };
 
-        // Function to save the annotation
-        const saveAnnotation = async () => {
-            if (!this.annotationLayer) return;
-            const annotation = await this.annotationLayer.get_features();
-            if (annotation.features.length > 0) {
-                await dataProvider.save_annotation(this.filename, annotation, [this.image._rshape[0], this.image._rshape[1]]);
-                await api.showMessage("Annotation saved.");
-            } else {
-                await api.showMessage("No annotation provided. Saving was skipped.");
+        // Function to load an image and display it in the viewer with the annotation layer
+        const setImageAnnotation = async () => {
+            // First remove existing layers from the viewer
+            await viewer.clear_layers();
+            // Then load new image and annotation layers
+            this.imageLayer = await setImageLayer({
+                viewer: viewer,
+                dataService: dataService,
+            });
+            const image = await getImageFromLayer({ imageLayer: this.imageLayer });
+
+            let embeddingPromise = null;
+            if (samService) {
+                embeddingPromise = computeEmbedding({
+                    samService: samService,
+                    image: image,
+                    modelID: this.modelID,
+                });
+            } else if (this.imageLayer.name === exampleImages[0].name) {
+                embeddingPromise = loadPrecomputedEmbedding({ image: image });
             }
+            this.annotationLayer = await setAnnotationLayer({
+                viewer: viewer,
+                edgeColor: this.edgeColor,
+                embeddingPromise: embeddingPromise,
+                modelPromise: this.modelPromise,
+            });
         };
 
         // Function to load the next image
         const nextImage = async () => {
-            await saveAnnotation();
-            await getImage();
+            // Save the current annotation if available
+            await saveAnnotation({
+                dataService: dataService,
+                imageLayer: this.imageLayer,
+                annotationLayer: this.annotationLayer,
+            });
+            // Load the next image
+            await setImageAnnotation();
         };
 
         // Add a control widget with a button to load the next image
@@ -191,8 +407,9 @@ class BioImageIOColabAnnotator {
             ],
         });
 
-        // Load the initial image
-        await getImage();
+        // Start loading the model and the first image
+        await setModel();
+        await setImageAnnotation();
         await api.showMessage("Ready to annotate!");
     }
 }
@@ -200,4 +417,3 @@ class BioImageIOColabAnnotator {
 // Export the annotator class
 api.export(new BioImageIOColabAnnotator());
 </script>
-

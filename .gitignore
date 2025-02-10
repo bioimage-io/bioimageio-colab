@@ -16,3 +16,4 @@ output/
 *.pth
 *zip
 visualize_annotation.py
+*.onnx
