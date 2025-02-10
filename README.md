@@ -30,7 +30,11 @@ BioImageIO Colab combines two powerful tools:
 
 ### Integrate SAM Compute Service
 
-#### Required Dependencies
+The SAM compute service can be integrated both in JavaScript (browser) and Python environments.
+
+#### JavaScript Integration (Browser)
+
+##### Required Dependencies
 ```html
 <!-- Hypha RPC WebSocket -->
 <script src="https://cdn.jsdelivr.net/npm/hypha-rpc@0.20.47/dist/hypha-rpc-websocket.min.js">
@@ -45,7 +49,7 @@ BioImageIO Colab combines two powerful tools:
 <script src="https://cdn.jsdelivr.net/gh/bioimage-io/bioimageio-colab@latest/plugins/onnx-mask-decoder.js">
 ```
 
-#### Integration Steps
+##### Integration Steps
 
 1. **Connect to BioEngine**
 ```javascript
@@ -89,3 +93,56 @@ const polygonCoords = processMaskToGeoJSON({
     threshold: 0,
 });
 ```
+
+#### Python Integration
+
+##### Required Dependencies
+```bash
+pip install opencv-python
+pip install onnxruntime
+pip install hypha-rpc
+```
+
+##### Integration Steps
+
+1. **Connect to BioEngine**
+```python
+from hypha_rpc import connect_to_server
+
+client = await connect_to_server({"server_url": "https://hypha.aicell.io"})
+svc = await client.get_service("bioimageio-colab/microsam", {"mode": "last"})
+```
+
+2. **Load SAM Model**
+```python
+model_id = "sam_vit_b_lm"  # or "sam_vit_b_em_organelles"
+model = load_sam_decoder(model_id)
+```
+
+3. **Process Images**
+```python
+# Load and process image
+image = load_image("path/to/image.tif")
+
+# Compute embedding
+embedding_result = await svc.compute_embedding(
+    image=image,
+    model_id=model_id,
+)
+
+# Segment with point prompt
+example_coordinates = (80, 80)
+feeds = prepare_model_data(embedding_result, example_coordinates)
+masks = model.run(["masks"], feeds)
+
+# Process mask (example: convert to binary and find contours)
+mask = masks[0].squeeze()
+binary_mask = (mask > 0).astype(np.uint8)
+contours, _ = cv2.findContours(
+    binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+)
+```
+
+For complete implementations, see:
+- JavaScript: [plugins/onnx-mask-decoder.js](plugins/onnx-mask-decoder.js)
+- Python: [bioimageio_colab/onnx_mask_decoder.py](bioimageio_colab/onnx_mask_decoder.py)

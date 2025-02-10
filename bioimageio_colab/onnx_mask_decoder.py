@@ -29,15 +29,6 @@ def load_image(file_path):
     return image
 
 
-def get_compute_service(
-    server_url: str = "https://hypha.aicell.io",
-    service_id: str = "bioimageio-colab/microsam",
-):
-    client = connect_to_server({"server_url": server_url})
-    svc = client.get_service(service_id, {"mode": "last"})
-    return svc
-
-
 def load_sam_decoder(
     model_id: str = "sam_vit_b_lm",
     output_dir: str = "../data",
@@ -119,7 +110,9 @@ model_id = "sam_vit_b_lm"
 
 image = load_image("../data/example_image.tif")
 
-svc = get_compute_service()
+client = connect_to_server({"server_url": "https://hypha.aicell.io"})
+svc = client.get_service("bioimageio-colab/microsam", {"mode": "last"})
+
 embedding_result = svc.compute_embedding(
     image=image,
     model_id=model_id,
