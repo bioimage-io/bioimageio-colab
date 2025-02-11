@@ -737,7 +737,7 @@
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {annotationServices.length > 0 ? (
                         annotationServices.map((service) => {
-                            const configStr = `{"server_url": "${serverUrl}", "annotation_service_id": "${service.id}", "token": "${token}"}`;
+                            const configStr = `{"serverUrl": "${serverUrl}", "imageProviderId": "${service.id}"}`;  // "token": "${token}"
                             const encodedConfig = encodeURIComponent(configStr);
                             const annotatorUrl = `https://imjoy.io/lite?plugin=${pluginUrl}&config=${encodedConfig}`;
 
