@@ -820,7 +820,7 @@
                     const annotationSid = serviceOutput.attrs.id;
                     console.log("Annotation Service ID:", annotationSid);
                     // Create the annotator URL
-                    const configStr = `{"server_url": "${serverUrl}", "annotation_service_id": "${annotationSid}", "token": "${token}"}`;
+                    const configStr = `{"serverUrl": "${serverUrl}", "imageProviderId": "${annotationSid}"}`;  // "token": "${token}"
                     const encodedConfig = encodeURIComponent(configStr);
                     const annotatorUrl = `https://imjoy.io/lite?plugin=${pluginUrl}&config=${encodedConfig}`;
                     console.log("Annotation URL:\n----------\n", annotatorUrl);
