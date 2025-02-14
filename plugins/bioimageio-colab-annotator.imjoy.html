@@ -4,7 +4,7 @@
   "type": "iframe",
   "tags": [],
   "ui": "",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "cover": "",
   "description": "Collaborative Annotator for BioImage.IO with Automated Segmentation",
   "icon": "extension",
@@ -312,6 +312,7 @@ const saveAnnotation = async ({ dataService, imageLayer, annotationLayer }) => {
     }
     const annotation = await annotationLayer.get_features();
     if (annotation.features.length > 0) {
+        const filename = imageLayer.name
         const image = await imageLayer.get_image();
         const dimensions = await image.getDimensions();
         await dataService.save_annotation(filename, annotation, [dimensions[0], dimensions[1]]);
