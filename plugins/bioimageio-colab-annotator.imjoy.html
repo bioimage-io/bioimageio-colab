@@ -250,7 +250,7 @@ const addMaskToLayer = async ({ annotationLayer, masks, edgeColor }) => {
             },
             properties: {
                 edge_color: edgeColor,
-                edge_width: 2,
+                edge_width: 5,
                 size: 7,
             },
         };
@@ -264,9 +264,13 @@ const setAnnotationLayer = async ({ viewer, edgeColor, embeddingPromise, modelPr
     // Add the annotation functionality to the interface
     let annotationLayer
     annotationLayer = await viewer.add_shapes([], {
-        shape_type: "polygon",
-        draw_edge_color: edgeColor,
         name: "annotation",
+        shape_type: "polygon",
+        draw_enable: true,
+        draw_shape_type: "point",
+        draw_edge_width: 5,
+        draw_edge_color: edgeColor,
+        draw_size: 0.1,
         _rintf: true,
         // Callback for adding a new feature (annotation point)
         add_feature_callback: async (shape) => {
