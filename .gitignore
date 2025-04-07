@@ -1,6 +1,6 @@
 __pycache__/
 .env
-.vscode/launch.json
+.vscode
 *.egg-info/
 build/
 dist/

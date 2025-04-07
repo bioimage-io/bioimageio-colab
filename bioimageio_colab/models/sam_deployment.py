@@ -1,7 +1,9 @@
 import numpy as np
 from ray import serve
+from pathlib import Path
+from typing import Optional
 
-from .sam_image_encoder import SamImageEncoder
+from .sam_inference_model import SamInferenceModel
 
 SAM_MODELS = {
     "sam_vit_b": {
@@ -26,10 +28,11 @@ SAM_MODELS = {
 )
 class SamDeployment:
     def __init__(self, cache_dir: str):
-        self.cache_dir = cache_dir
+        self.cache_dir = Path(cache_dir)
         self.models = SAM_MODELS
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    async def _download_model(self, model_path: str, model_url: str) -> None:
+    async def _download_model(self, model_path: Path, model_url: str) -> None:
         import aiohttp
 
         async with aiohttp.ClientSession() as session:
@@ -37,30 +40,56 @@ class SamDeployment:
                 if response.status != 200:
                     raise RuntimeError(f"Failed to download model from {model_url}")
                 content = await response.read()
-                with open(model_path, "wb") as f:
-                    f.write(content)
+                model_path.write_bytes(content)
 
     @serve.multiplexed(max_num_models_per_replica=1)
     async def get_model(self, model_id: str):
-        import os
+        model_path = self.cache_dir / f"{model_id}.pt"
 
-        model_path = os.path.join(self.cache_dir, f"{model_id}.pt")
-
-        if not os.path.exists(model_path):
-            os.makedirs(self.cache_dir, exist_ok=True)
+        if not model_path.exists():
             await self._download_model(
                 model_path=model_path,
                 model_url=self.models[model_id]["url"],
             )
 
-        return SamImageEncoder(
-            model_path=model_path,
+        return SamInferenceModel(
+            model_path=str(model_path),
             model_architecture=self.models[model_id]["architecture"],
         )
 
-    async def __call__(self, array: np.ndarray) -> np.ndarray:
-        # Get the model from the request
+    async def encode(self, array: np.ndarray) -> dict:
         model_id = serve.get_multiplexed_model_id()
         model = await self.get_model(model_id)
-        
         return model.encode(array)
+
+    async def get_onnx_model(
+        self,
+        quantize: bool = True,
+    ) -> bytes:
+        model_id = serve.get_multiplexed_model_id()
+        model = await self.get_model(model_id)
+        return model.get_onnx_model(
+            quantize=quantize,
+            gelu_approximated=False,
+        )
+
+    async def segment_image(
+        self,
+        array: np.ndarray,
+        points_per_side: Optional[int] = 32,
+        pred_iou_thresh: Optional[float] = 0.88,
+        stability_score_thresh: Optional[float] = 0.95,
+        min_mask_region_area: Optional[int] = 0,
+    ) -> dict:
+        model_id = serve.get_multiplexed_model_id()
+        model = await self.get_model(model_id)
+        return model.segment_image(
+            array,
+            points_per_side=points_per_side,
+            pred_iou_thresh=pred_iou_thresh,
+            stability_score_thresh=stability_score_thresh,
+            min_mask_region_area=min_mask_region_area,
+        )
+
+    async def __call__(self, array: np.ndarray) -> dict:
+        return await self.encode(array)
