@@ -1,9 +1,11 @@
-import numpy as np
-from ray import serve
 from pathlib import Path
 from typing import Optional
 
-from .sam_inference_model import SamInferenceModel
+import numpy as np
+from ray import serve
+
+from bioimageio_colab.deployments.sam_inference_model import SamInferenceModel
+from bioimageio_colab.deployments.utils import parse_requirements
 
 SAM_MODELS = {
     "sam_vit_b": {
@@ -23,10 +25,19 @@ SAM_MODELS = {
 
 # Default deployment options can be overridden by `deployment.options()`
 @serve.deployment(
-    ray_actor_options={"num_gpus": 1},
+    ray_actor_options={
+        "num_gpus": 1,
+        "num_cpus": 1,
+        # "memory": None,
+        "runtime_env": {
+            "pip": parse_requirements(
+                Path(__file__).parent.parent.parent / "requirements-sam.txt"
+            ),
+        },
+    },
     max_ongoing_requests=1,
 )
-class SamDeployment:
+class SamInferenceDeployment:
     def __init__(self, cache_dir: str):
         self.cache_dir = Path(cache_dir)
         self.models = SAM_MODELS
@@ -43,7 +54,7 @@ class SamDeployment:
                 model_path.write_bytes(content)
 
     @serve.multiplexed(max_num_models_per_replica=1)
-    async def get_model(self, model_id: str):
+    async def _get_model(self, model_id: str):
         model_path = self.cache_dir / f"{model_id}.pt"
 
         if not model_path.exists():
@@ -59,7 +70,7 @@ class SamDeployment:
 
     async def encode(self, array: np.ndarray) -> dict:
         model_id = serve.get_multiplexed_model_id()
-        model = await self.get_model(model_id)
+        model = await self._get_model(model_id)
         return model.encode(array)
 
     async def get_onnx_model(
@@ -67,10 +78,10 @@ class SamDeployment:
         quantize: bool = True,
     ) -> bytes:
         model_id = serve.get_multiplexed_model_id()
-        model = await self.get_model(model_id)
+        model = await self._get_model(model_id)
         return model.get_onnx_model(
             quantize=quantize,
-            gelu_approximated=False,
+            gelu_approximate=False,
         )
 
     async def segment_image(
@@ -82,7 +93,7 @@ class SamDeployment:
         min_mask_region_area: Optional[int] = 0,
     ) -> dict:
         model_id = serve.get_multiplexed_model_id()
-        model = await self.get_model(model_id)
+        model = await self._get_model(model_id)
         return model.segment_image(
             array,
             points_per_side=points_per_side,
