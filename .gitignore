@@ -18,3 +18,4 @@ output/
 visualize_annotation.py
 *.onnx
 ray_tmp
+service_id.txt

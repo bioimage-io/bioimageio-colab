@@ -1,7 +1,7 @@
 import argparse
 import asyncio
 
-from bioimageio_colab.register_sam_service import register_service
+from bioimageio_colab.sam_service import SAMService
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -48,12 +48,6 @@ if __name__ == "__main__":
         help="Restart the Ray deployment if it already exists",
     )
     parser.add_argument(
-        "--skip_test_runs",
-        default=False,
-        action="store_true",
-        help="Skip test run of each model",
-    )
-    parser.add_argument(
         "--max_concurrent_requests",
         default=4,
         type=int,
@@ -67,6 +61,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    loop = asyncio.get_event_loop()
-    loop.create_task(register_service(args=args))
-    loop.run_forever()
+    sam_service = SAMService(args)
+    sam_service.deploy_to_ray()
+
+    asyncio.run(sam_service.register_service())
