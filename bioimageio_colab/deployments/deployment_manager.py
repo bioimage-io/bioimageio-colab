@@ -247,9 +247,7 @@ if __name__ == "__main__":
 
     deployment_manager.deploy(
         deployment="SamInference",
-        deployment_kwargs={
-            "cache_dir": str(cache_dir),
-        },
+        deployment_kwargs={"cache_dir": str(cache_dir)},
     )
 
     handle = deployment_manager.get_handle("SamInference")

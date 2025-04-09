@@ -71,14 +71,12 @@ class SamInference:
         )
 
     async def __call__(self, array: np.ndarray) -> dict:
-        model_id = serve.get_multiplexed_model_id()
-        model = await self._get_model(model_id)
-        return model.encode(array)
+        return await self.encode_image(array)
 
-    async def encode(self, array: np.ndarray) -> dict:
+    async def encode_image(self, array: np.ndarray) -> dict:
         model_id = serve.get_multiplexed_model_id()
         model = await self._get_model(model_id)
-        return model.encode(array)
+        return model.encode_image(array)
 
     async def get_onnx_model(
         self,

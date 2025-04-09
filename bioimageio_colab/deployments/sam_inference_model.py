@@ -53,7 +53,7 @@ class SamInferenceModel:
 
         return array
 
-    def encode(self, array: np.ndarray) -> dict:
+    def encode_image(self, array: np.ndarray) -> dict:
         """Encode an image using the SAM image encoder."""
         from segment_anything import SamPredictor
 
@@ -248,7 +248,7 @@ if __name__ == "__main__":
 
     # Test paths
     base_dir = Path(__file__).parent.parent.parent
-    model_path = base_dir / ".model_cache/sam_vit_b.pt"
+    model_path = base_dir / ".model_cache/sam_vit_b_lm.pt"
     test_image_path = base_dir / "data/example_image.tif"
 
     # Initialize model
@@ -267,7 +267,7 @@ if __name__ == "__main__":
 
     # Measure encoding time
     start_time = time.time()
-    result = model.encode(image_rgb)
+    result = model.encode_image(image_rgb)
     encode_time = time.time() - start_time
 
     print(f"Encoding time: {encode_time:.2f}s")
