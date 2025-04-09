@@ -29,6 +29,7 @@ SAM_MODELS = {
         "num_gpus": 1,
         "num_cpus": 1,
         # "memory": None,
+        # Deployment specific requirements
         "runtime_env": {
             "pip": parse_requirements(
                 Path(__file__).parent.parent.parent / "requirements-sam.txt"
@@ -36,9 +37,10 @@ SAM_MODELS = {
         },
     },
     max_ongoing_requests=1,
+    max_queued_requests=10,
 )
-class SamInferenceDeployment:
-    def __init__(self, cache_dir: str):
+class SamInference:
+    def __init__(self, cache_dir: str = "/tmp/ray/.model_cache"):
         self.cache_dir = Path(cache_dir)
         self.models = SAM_MODELS
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -67,6 +69,11 @@ class SamInferenceDeployment:
             model_path=str(model_path),
             model_architecture=self.models[model_id]["architecture"],
         )
+    
+    async def __call__(self, array: np.ndarray) -> dict:
+        model_id = serve.get_multiplexed_model_id()
+        model = await self._get_model(model_id)
+        return model.encode(array)
 
     async def encode(self, array: np.ndarray) -> dict:
         model_id = serve.get_multiplexed_model_id()
@@ -101,6 +108,3 @@ class SamInferenceDeployment:
             stability_score_thresh=stability_score_thresh,
             min_mask_region_area=min_mask_region_area,
         )
-
-    async def __call__(self, array: np.ndarray) -> dict:
-        return await self.encode(array)
