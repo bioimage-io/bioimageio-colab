@@ -69,7 +69,7 @@ class SamInference:
             model_path=str(model_path),
             model_architecture=self.models[model_id]["architecture"],
         )
-    
+
     async def __call__(self, array: np.ndarray) -> dict:
         model_id = serve.get_multiplexed_model_id()
         model = await self._get_model(model_id)

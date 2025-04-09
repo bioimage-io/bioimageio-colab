@@ -2,6 +2,7 @@ import socket
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
+from time import sleep
 
 import ray
 from ray import serve
@@ -31,14 +32,14 @@ class DeploymentManager:
 
     def _connect_to_ray(self, address: str, serve_port: int, **kwargs) -> None:
         """Connect to Ray with the specified runtime environment"""
-        self.logger.info("Connecting to Ray...")
-
         # Check if Ray is already initialized
-        if ray.is_initialized():
+        while ray.is_initialized():
             self.logger.info("Ray is already initialized. Shutting down...")
             ray.shutdown()
+            sleep(1)
 
         # Connect to Ray
+        self.logger.info("Connecting to Ray...")
         ray.init(
             address=address,
             # Add the bioimageio_colab module to the runtime env
