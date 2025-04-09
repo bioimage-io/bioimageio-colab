@@ -33,7 +33,7 @@ def test_service_http_api():
                 assert value["status"] == "HEALTHY"
 
 
-def test_service_python_api():
+def test_service_hello():
     client = connect_to_server({"server_url": SERVER_URL, "method_timeout": 5})
     assert client
 
@@ -42,14 +42,32 @@ def test_service_python_api():
     service = client.get_service(sid, {"mode": "last"})
     assert service.config.workspace == WORKSPACE_NAME
 
-    # Test service functions
     response = service.hello()
     assert response == "Welcome to the Interactive Segmentation service!"
+
+
+def test_service_ping():
+    client = connect_to_server({"server_url": SERVER_URL, "method_timeout": 5})
+    assert client
+
+    client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
+    sid = f"{WORKSPACE_NAME}/{client_str}{SERVICE_ID}"
+    service = client.get_service(sid, {"mode": "last"})
+    assert service.config.workspace == WORKSPACE_NAME
 
     response = service.ping()
     assert response == "pong"
 
-    # Test embedding computation
+
+def test_service_compute_embedding():
+    client = connect_to_server({"server_url": SERVER_URL, "method_timeout": 5})
+    assert client
+
+    client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
+    sid = f"{WORKSPACE_NAME}/{client_str}{SERVICE_ID}"
+    service = client.get_service(sid, {"mode": "last"})
+    assert service.config.workspace == WORKSPACE_NAME
+
     image = imread(IMG_PATH)
     for model_id in MODEL_IDS:
         result = service.compute_embedding(
@@ -69,19 +87,44 @@ def test_service_python_api():
         assert sam_scale == 2.0
 
 
+def test_service_get_onnx_model():
+    client = connect_to_server({"server_url": SERVER_URL, "method_timeout": 5})
+    assert client
 
-    # Test mask computation
-    # polygon_features = service.compute_mask(
-    #     model_name=MODEL_NAME,
-    #     embedding=embedding,
-    #     image_size=image.shape[:2],
-    #     point_coordinates=[[10, 10]],
-    #     point_labels=[1],
-    #     format="kaibu",
-    # )
-    # assert isinstance(polygon_features, list)
-    # assert len(polygon_features) == 1  # Only one point given
+    client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
+    sid = f"{WORKSPACE_NAME}/{client_str}{SERVICE_ID}"
+    service = client.get_service(sid, {"mode": "last"})
+    assert service.config.workspace == WORKSPACE_NAME
 
-    # Test service test run
-    # result = service.test_model(model_name="vit_b_lm")
-    # assert result == {"status": "ok"}
+    for model_id in MODEL_IDS:
+        onnx_model = service.get_onnx_model(
+            model_id=model_id,
+            quantize=True,
+        )
+        assert isinstance(onnx_model, bytes)
+        assert len(onnx_model) > 0
+
+
+def test_service_segment_image():
+    client = connect_to_server({"server_url": SERVER_URL, "method_timeout": 5})
+    assert client
+
+    client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
+    sid = f"{WORKSPACE_NAME}/{client_str}{SERVICE_ID}"
+    service = client.get_service(sid, {"mode": "last"})
+    assert service.config.workspace == WORKSPACE_NAME
+
+    image = imread(IMG_PATH)
+    for model_id in MODEL_IDS:
+        segmentation_result = service.segment_image(
+            image=image,
+            model_id=model_id,
+            points_per_side=16,
+            pred_iou_thresh=0.9,
+            stability_score_thresh=0.95,
+            min_mask_region_area=100,
+        )
+        assert isinstance(segmentation_result, dict)
+        assert "mask" in segmentation_result
+        assert isinstance(segmentation_result["mask"], np.ndarray)
+        assert segmentation_result["mask"].size > 0
