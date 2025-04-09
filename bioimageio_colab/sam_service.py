@@ -123,6 +123,78 @@ class SAMService:
             self.logger.error(f"User '{user_id}' - Error computing embedding: {e}")
             raise e
 
+    async def get_onnx_model(
+        self,
+        semaphore: asyncio.Semaphore,
+        model_id: str,
+        quantize: bool = True,
+        context: dict = None,
+    ) -> bytes:
+        """
+        Get the ONNX model for the given model ID.
+        """
+        try:
+            user = context["user"]
+            if self.args.require_login and user["is_anonymous"]:
+                raise PermissionError("You must be logged in to use this service.")
+            user_id = user["id"]
+
+            self.logger.info(f"User '{user_id}' - Fetching ONNX model (model: '{model_id}')...")
+            async with semaphore:
+                handle = self.deployment_manager.get_handle(self.deployment_name)
+                result = await handle.get_onnx_model.options(
+                    multiplexed_model_id=model_id
+                ).remote(quantize=quantize)
+                self.logger.info(f"User '{user_id}' - ONNX model fetched successfully.")
+                return result
+        except Exception as e:
+            self.logger.error(f"User '{user_id}' - Error fetching ONNX model: {e}")
+            raise e
+
+    async def segment_image(
+        self,
+        semaphore: asyncio.Semaphore,
+        image: np.ndarray,
+        model_id: str,
+        points_per_side: int = 32,
+        pred_iou_thresh: float = 0.88,
+        stability_score_thresh: float = 0.95,
+        min_mask_region_area: int = 0,
+        context: dict = None,
+    ) -> dict:
+        """
+        Segment an image using the given model ID.
+        """
+        try:
+            user = context["user"]
+            if self.args.require_login and user["is_anonymous"]:
+                raise PermissionError("You must be logged in to use this service.")
+            user_id = user["id"]
+
+            self.logger.info(f"User '{user_id}' - Putting image into the object store...")
+            obj_ref = ray.put(image)
+            del image
+
+            async with semaphore:
+                self.logger.info(
+                    f"User '{user_id}' - Segmenting image (model: '{model_id}')..."
+                )
+                handle = self.deployment_manager.get_handle(self.deployment_name)
+                result = await handle.segment_image.options(
+                    multiplexed_model_id=model_id
+                ).remote(
+                    obj_ref,
+                    points_per_side=points_per_side,
+                    pred_iou_thresh=pred_iou_thresh,
+                    stability_score_thresh=stability_score_thresh,
+                    min_mask_region_area=min_mask_region_area,
+                )
+                self.logger.info(f"User '{user_id}' - Image segmented successfully.")
+                return result
+        except Exception as e:
+            self.logger.error(f"User '{user_id}' - Error segmenting image: {e}")
+            raise e
+
     async def register_service(self) -> None:
         if self.deployment_name is None:
             raise RuntimeError(
@@ -174,6 +246,12 @@ class SAMService:
                 "deployment_status": self.deployment_status,
                 "compute_embedding": partial(
                     self.compute_image_embedding, semaphore=semaphore
+                ),
+                "get_onnx_model": partial(
+                    self.get_onnx_model, semaphore=semaphore
+                ),
+                "segment_image": partial(
+                    self.segment_image, semaphore=semaphore
                 ),
             }
         )
