@@ -331,7 +331,9 @@ if __name__ == "__main__":
 
     # Test segmentation
     start_time = time.time()
-    result = model.segment_image(image_rgb, pred_iou_thresh=0.3, stability_score_thresh=0.75)
+    result = model.segment_image(
+        image_rgb, pred_iou_thresh=0.3, stability_score_thresh=0.75
+    )
     segment_time = time.time() - start_time
 
     print(f"\nSegmentation time: {segment_time:.2f}s")

@@ -34,4 +34,4 @@ RUN chown -R bioimageio_colab:bioimageio_colab /app/ \
 USER bioimageio_colab
 
 # Default entrypoint for running the application
-ENTRYPOINT ["python", "-m", "bioimageio_colab"]
+CMD ["bash"]

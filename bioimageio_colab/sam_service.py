@@ -22,7 +22,9 @@ class SAMService:
     def __init__(self, args: dict) -> None:
         self.logger = create_logger("SAMService")
         self.args = args
-        self.deployment_manager = DeploymentManager(address=args.ray_address)
+        self.deployment_manager = DeploymentManager(
+            address=args.ray_address, **eval(args.ray_init_kwargs)
+        )
 
         # Initialize service attributes
         self.deployment_name = None
@@ -139,7 +141,9 @@ class SAMService:
                 raise PermissionError("You must be logged in to use this service.")
             user_id = user["id"]
 
-            self.logger.info(f"User '{user_id}' - Fetching ONNX model (model: '{model_id}')...")
+            self.logger.info(
+                f"User '{user_id}' - Fetching ONNX model (model: '{model_id}')..."
+            )
             async with semaphore:
                 handle = self.deployment_manager.get_handle(self.deployment_name)
                 result = await handle.get_onnx_model.options(
@@ -171,7 +175,9 @@ class SAMService:
                 raise PermissionError("You must be logged in to use this service.")
             user_id = user["id"]
 
-            self.logger.info(f"User '{user_id}' - Putting image into the object store...")
+            self.logger.info(
+                f"User '{user_id}' - Putting image into the object store..."
+            )
             obj_ref = ray.put(image)
             del image
 
@@ -200,7 +206,7 @@ class SAMService:
             raise RuntimeError(
                 "Deployment not initialized. Please call deploy_to_ray() first."
             )
-        
+
         self.logger.info("Registering the SAM annotation service...")
         workspace_token = self.args.token or os.environ.get("WORKSPACE_TOKEN")
         if not workspace_token:
@@ -247,12 +253,8 @@ class SAMService:
                 "compute_embedding": partial(
                     self.compute_image_embedding, semaphore=semaphore
                 ),
-                "get_onnx_model": partial(
-                    self.get_onnx_model, semaphore=semaphore
-                ),
-                "segment_image": partial(
-                    self.segment_image, semaphore=semaphore
-                ),
+                "get_onnx_model": partial(self.get_onnx_model, semaphore=semaphore),
+                "segment_image": partial(self.segment_image, semaphore=semaphore),
             }
         )
 

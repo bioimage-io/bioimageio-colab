@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -26,7 +27,7 @@ SAM_MODELS = {
 # Default deployment options can be overridden by `deployment.options()`
 @serve.deployment(
     ray_actor_options={
-        "num_gpus": 1,
+        "num_gpus": 0 if os.getenv("DISABLE_GPU", "false") == "true" else 1,
         "num_cpus": 1,
         # "memory": None,
         # Deployment specific requirements

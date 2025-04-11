@@ -1,20 +1,31 @@
+import os
+
 import numpy as np
 import requests
+from dotenv import find_dotenv, load_dotenv
 from hypha_rpc.sync import connect_to_server
 from tifffile import imread
-import os
+
+dotenv_path = find_dotenv()
+if dotenv_path:
+    load_dotenv(dotenv_path, override=True)
 
 SERVER_URL = "https://hypha.aicell.io"
 WORKSPACE_NAME = "bioimageio-colab"
-SERVICE_ID = "microsam"
-CLIENT_ID = os.getenv("CLIENT_ID")
+
+CLIENT_ID = os.getenv("CLIENT_ID", "")
+SERVICE_ID = (
+    f"{CLIENT_ID}:{os.getenv('SERVICE_ID', 'microsam_test')}"
+    if CLIENT_ID
+    else os.getenv("SERVICE_ID", "microsam_test")
+)
+
 MODEL_IDS = ["sam_vit_b", "sam_vit_b_lm", "sam_vit_b_em_organelles"]
 IMG_PATH = "./data/example_image.tif"
 
 
 def test_service_http_api():
-    client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
-    service_url = f"{SERVER_URL}/{WORKSPACE_NAME}/services/{client_str}{SERVICE_ID}"
+    service_url = f"{SERVER_URL}/{WORKSPACE_NAME}/services/{SERVICE_ID}"
 
     response = requests.get(f"{service_url}/hello?_mode=last")
     assert response.status_code == 200
@@ -24,7 +35,9 @@ def test_service_http_api():
     assert response.status_code == 200
     assert response.json() == "pong"
 
-    response = requests.get(f"{service_url}/deployment_status?assert_status=True&_mode=last")
+    response = requests.get(
+        f"{service_url}/deployment_status?assert_status=True&_mode=last"
+    )
     assert response.status_code == 200
     for value in response.json().values():
         assert value["status"] == "RUNNING"
@@ -37,8 +50,7 @@ def test_service_hello():
     client = connect_to_server({"server_url": SERVER_URL, "method_timeout": 5})
     assert client
 
-    client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
-    sid = f"{WORKSPACE_NAME}/{client_str}{SERVICE_ID}"
+    sid = f"{WORKSPACE_NAME}/{SERVICE_ID}"
     service = client.get_service(sid, {"mode": "last"})
     assert service.config.workspace == WORKSPACE_NAME
 
@@ -50,8 +62,7 @@ def test_service_ping():
     client = connect_to_server({"server_url": SERVER_URL, "method_timeout": 5})
     assert client
 
-    client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
-    sid = f"{WORKSPACE_NAME}/{client_str}{SERVICE_ID}"
+    sid = f"{WORKSPACE_NAME}/{SERVICE_ID}"
     service = client.get_service(sid, {"mode": "last"})
     assert service.config.workspace == WORKSPACE_NAME
 
@@ -63,8 +74,7 @@ def test_service_compute_embedding():
     client = connect_to_server({"server_url": SERVER_URL, "method_timeout": 5})
     assert client
 
-    client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
-    sid = f"{WORKSPACE_NAME}/{client_str}{SERVICE_ID}"
+    sid = f"{WORKSPACE_NAME}/{SERVICE_ID}"
     service = client.get_service(sid, {"mode": "last"})
     assert service.config.workspace == WORKSPACE_NAME
 
@@ -91,8 +101,7 @@ def test_service_get_onnx_model():
     client = connect_to_server({"server_url": SERVER_URL, "method_timeout": 5})
     assert client
 
-    client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
-    sid = f"{WORKSPACE_NAME}/{client_str}{SERVICE_ID}"
+    sid = f"{WORKSPACE_NAME}/{SERVICE_ID}"
     service = client.get_service(sid, {"mode": "last"})
     assert service.config.workspace == WORKSPACE_NAME
 
@@ -109,8 +118,7 @@ def test_service_segment_image():
     client = connect_to_server({"server_url": SERVER_URL, "method_timeout": 5})
     assert client
 
-    client_str = f"{CLIENT_ID}:" if CLIENT_ID else ""
-    sid = f"{WORKSPACE_NAME}/{client_str}{SERVICE_ID}"
+    sid = f"{WORKSPACE_NAME}/{SERVICE_ID}"
     service = client.get_service(sid, {"mode": "last"})
     assert service.config.workspace == WORKSPACE_NAME
 

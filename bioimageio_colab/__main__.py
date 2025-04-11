@@ -37,7 +37,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--num_replicas",
-        default=2,
+        default=1,
         type=int,
         help="Number of replicas for the SAM deployment",
     )
@@ -58,6 +58,11 @@ if __name__ == "__main__":
         default=False,
         action="store_true",
         help="Require login to access the function `compute_image_embedding`",
+    )
+    parser.add_argument(
+        "--ray_init_kwargs",
+        default="{}",
+        help="Additional keyword arguments for Ray initialization",
     )
     args = parser.parse_args()
 
