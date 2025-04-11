@@ -1,7 +1,7 @@
 import argparse
 import asyncio
 
-from bioimageio_colab.register_sam_service import register_service
+from bioimageio_colab.sam_service import SAMService
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -37,7 +37,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--num_replicas",
-        default=2,
+        default=1,
         type=int,
         help="Number of replicas for the SAM deployment",
     )
@@ -46,12 +46,6 @@ if __name__ == "__main__":
         default=False,
         action="store_true",
         help="Restart the Ray deployment if it already exists",
-    )
-    parser.add_argument(
-        "--skip_test_runs",
-        default=False,
-        action="store_true",
-        help="Skip test run of each model",
     )
     parser.add_argument(
         "--max_concurrent_requests",
@@ -65,8 +59,14 @@ if __name__ == "__main__":
         action="store_true",
         help="Require login to access the function `compute_image_embedding`",
     )
+    parser.add_argument(
+        "--ray_init_kwargs",
+        default="{}",
+        help="Additional keyword arguments for Ray initialization",
+    )
     args = parser.parse_args()
 
-    loop = asyncio.get_event_loop()
-    loop.create_task(register_service(args=args))
-    loop.run_forever()
+    sam_service = SAMService(args)
+    sam_service.deploy_to_ray()
+
+    asyncio.run(sam_service.register_service())

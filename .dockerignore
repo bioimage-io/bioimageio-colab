@@ -35,3 +35,7 @@ docker-compose.yml
 
 # Ignore project metadata & readme (unless needed)
 README.md
+
+ray_sessions
+service_id.txt
+.model_cache

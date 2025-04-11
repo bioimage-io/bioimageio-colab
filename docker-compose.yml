@@ -1,19 +1,25 @@
 version: '3.9'
 
 services:
-  interactive-segmentation:
+  bioimageio_colab:
     build:
       context: .
       dockerfile: Dockerfile
     image: ghcr.io/bioimage-io/bioimageio-colab:latest
+    container_name: bioimageio_colab
+    volumes:
+      - ./ray_sessions:/tmp/ray
+      - ./.model_cache:/tmp/ray/.model_cache
+    shm_size: 10.24gb
     env_file:
       - .env
+    restart: always
     command: [
+      "python", "-m", "bioimageio_colab",
       "--server_url=https://hypha.aicell.io",
       "--workspace_name=bioimageio-colab",
       "--service_id=microsam",
       "--cache_dir=/tmp/ray/.model_cache",
-      "--skip_test_runs",
       "--num_replicas=1",
       "--max_concurrent_requests=2",
     ]
@@ -24,6 +30,5 @@ services:
             - driver: nvidia
               device_ids: ['2']
               capabilities: [gpu]
-    shm_size: 10.24gb
-    volumes:
-      - /data/tmp/ray:/tmp/ray
+    runtime: nvidia
+

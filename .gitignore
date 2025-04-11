@@ -1,6 +1,6 @@
 __pycache__/
 .env
-.vscode/launch.json
+.vscode
 *.egg-info/
 build/
 dist/
@@ -17,3 +17,8 @@ output/
 *zip
 visualize_annotation.py
 *.onnx
+ray_tmp
+service_id.txt
+.model_cache
+.pytest_cache
+ray_sessions
