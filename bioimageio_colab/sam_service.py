@@ -94,9 +94,9 @@ class SAMService:
 
     async def compute_image_embedding(
         self,
-        semaphore: asyncio.Semaphore,
         image: np.ndarray,
         model_id: str,
+        semaphore: asyncio.Semaphore = None,
         context: dict = None,
     ) -> dict:
         try:
@@ -127,9 +127,9 @@ class SAMService:
 
     async def get_onnx_model(
         self,
-        semaphore: asyncio.Semaphore,
         model_id: str,
         quantize: bool = True,
+        semaphore: asyncio.Semaphore = None,
         context: dict = None,
     ) -> bytes:
         """
@@ -157,13 +157,13 @@ class SAMService:
 
     async def segment_image(
         self,
-        semaphore: asyncio.Semaphore,
         image: np.ndarray,
         model_id: str,
         points_per_side: int = 32,
         pred_iou_thresh: float = 0.88,
         stability_score_thresh: float = 0.95,
         min_mask_region_area: int = 0,
+        semaphore: asyncio.Semaphore = None,
         context: dict = None,
     ) -> dict:
         """
