@@ -14,8 +14,8 @@
   "env": "",
   "permissions": [],
   "requirements": [
-    "https://cdn.jsdelivr.net/npm/hypha-rpc@0.20.47/dist/hypha-rpc-websocket.min.js",
-    "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js",
+    "https://cdn.jsdelivr.net/npm/hypha-rpc@latest/dist/hypha-rpc-websocket.min.js",
+    "https://cdn.jsdelivr.net/npm/onnxruntime-web@v1.22.0/dist/ort.min.js",
     "https://docs.opencv.org/4.5.0/opencv.js",
     "https://cdn.jsdelivr.net/gh/bioimage-io/bioimageio-colab@latest/plugins/onnx-mask-decoder.js"
   ],
@@ -44,50 +44,62 @@ const getServices = async (ctx) => {
     config.imageProviderId = config.imageProviderId || null;
     config.samServiceId = config.samServiceId || "bioimageio-colab/microsam";
 
-    // Connect to the Hypha server
-    console.log(`Connecting to server ${config.serverUrl}...`);
-    await api.showMessage(`Connecting to server ${config.serverUrl}...`);
-    const server = await hyphaWebsocketClient.connectToServer({
-        server_url: config.serverUrl,
-        token: config.token,
-    });
-
-    // Get the current workspace and user ID
-    const currentWorkspace = server.config.user.scope.current_workspace;
-    const userID = server.config.user.id;
-    console.log(`Connected to workspace ${currentWorkspace} as user ${userID}.`);
-
+    // Initialize variables for the server and services
+    let server = null;
     let dataService = null;
     let samService = null;
 
-    if (config.imageProviderId) {
-        // Get the image provider service from the server
-        try {
-            dataService = await server.getService(config.imageProviderId);
-            console.log(`Received image provider service with ID: ${config.imageProviderId}`);
-        } catch (e) {
-            console.error(e);
-            await api.alert(
-                `The image provider cannot be reached (ID: ${config.imageProviderId}). Please check if the service is running.`
-            );
-        }
-    } else {
-        const msg = "No annotation service ID provided in the configuration. Using example image.";
-        console.log(msg);
-        await api.alert(msg);
-    }
-
-    // Get the SAM service from the server
+    // Try connecting to the Hypha server
     try {
-        samService = await server.getService(config.samServiceId, { mode: "last" });
-        console.log(`Received SAM service with ID: ${config.samServiceId}`);
+        console.log(`Connecting to server ${config.serverUrl}...`);
+        await api.showMessage(`Connecting to server ${config.serverUrl}...`);
+        server = await hyphaWebsocketClient.connectToServer({
+            server_url: config.serverUrl,
+            token: config.token,
+        });
+
+        // Get the current workspace and user ID
+        const currentWorkspace = server.config.user.scope.current_workspace;
+        const userID = server.config.user.id;
+        console.log(`Connected to workspace ${currentWorkspace} as user ${userID}.`);
     } catch (e) {
-        samService = null;
         console.error(e);
         await api.alert(
-            `The SAM service is currently not reachable (ID: ${config.samServiceId}). Please wait a few minutes and reload the page to try again.`,
+            `The Hypha server is currently not reachable (server URL: ${config.serverUrl}). Please wait a few minutes and reload the page to try again. Using example image instead.`,
             { duration: 6000 }
         );
+    }
+
+    if (server) {
+        // Get the data service from the server (if connected)
+        if (!config.imageProviderId) {
+            const msg = "No annotation service ID provided in the configuration. Using example image.";
+            console.log(msg);
+            await api.alert(msg);
+        } else {
+            try {
+                dataService = await server.getService(config.imageProviderId);
+                console.log(`Received image provider service with ID: ${config.imageProviderId}`);
+            } catch (e) {
+                console.error(e);
+                await api.alert(
+                    `The image provider cannot be reached (ID: ${config.imageProviderId}). Please check if the service is running.`
+                );
+            }
+        }
+
+        // Get the SAM service from the server (if connected)
+        try {
+            samService = await server.getService(config.samServiceId, { mode: "last" });
+            console.log(`Received SAM service with ID: ${config.samServiceId}`);
+        } catch (e) {
+            samService = null;
+            console.error(e);
+            await api.alert(
+                `The SAM service is currently not reachable (ID: ${config.samServiceId}). Please wait a few minutes and reload the page to try again.`,
+                { duration: 6000 }
+            );
+        }
     }
 
     // Return the services
