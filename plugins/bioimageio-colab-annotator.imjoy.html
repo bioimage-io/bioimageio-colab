@@ -27,7 +27,7 @@
 // Define example images
 let exampleImages = [
     {
-        name: "HPA_cells",
+        name: "hpa_cells",
         imageUrl: "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image.png",
         modelID: "sam_vit_b_lm",
         embeddingUrl: "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/data/example_image_sam_vit_b_lm.bin",
@@ -138,7 +138,7 @@ const convertImage = ({ pixelArray, width, height }) => {
     return image;
 };
 
-const loadExampleImage = async ({ url }) => {
+const loadImageFromUrl = async ({ url }) => {
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.crossOrigin = 'Anonymous';  // To handle CORS for external images
@@ -174,21 +174,23 @@ const loadExampleImage = async ({ url }) => {
 };
 
 const setImageLayer = async ({ viewer, dataService }) => {
-    let image;
+    let imageUrl;
     let filename;
     if (dataService) {
-        // Fetch a random image from the data provider if available
+        // Fetch a random image URL from the data provider if available
         console.log("Loading random image from the data provider...");
-        [image, filename] = await dataService.get_random_image();
-
+        imageUrl = await dataService.get_image();
+        filename = imageUrl.split("/").pop().split(".")[0];
     } else {
         // Load an example image if no data provider is available
         console.log("Loading example image...");
         const exampleImage = exampleImages[0];
-        // image = exampleImage.imageUrl;
-        image = await loadExampleImage({ url: exampleImage.imageUrl });
+        imageUrl = exampleImage.imageUrl;
         filename = exampleImage.name;
     }
+    
+    // Load the image from the URL
+    const image = await loadImageFromUrl({ url: imageUrl });
     let imageLayer = await viewer.view_image(image, { name: filename });
     console.log("Image displayed:", filename);
 

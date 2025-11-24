@@ -37,7 +37,7 @@ The SAM compute service can be integrated both in JavaScript (browser) and Pytho
 ##### Required Dependencies
 ```html
 <!-- Hypha RPC WebSocket -->
-<script src="https://cdn.jsdelivr.net/npm/hypha-rpc@0.20.47/dist/hypha-rpc-websocket.min.js">
+<script src="https://cdn.jsdelivr.net/npm/hypha-rpc@0.20.83/dist/hypha-rpc-websocket.min.js">
 
 <!-- ONNX Runtime Web -->
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js">

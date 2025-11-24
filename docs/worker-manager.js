@@ -140,24 +140,24 @@ class PyodideWorkerManager {
 
   async syncFs(workerId, direction) {
     if (!workerId) {
-        throw new Error("No worker ID provided and no current worker available.");
+      throw new Error("No worker ID provided and no current worker available.");
     }
     const worker = await this.getWorker(workerId);
     return new Promise((resolve, reject) => {
-        const handler = e => {
-            if (e.data.synced) {
-                worker.removeEventListener("message", handler);
-                resolve(true);
-            } else if (e.data.syncError) {
-                worker.removeEventListener("message", handler);
-                reject(new Error(e.data.syncError));
-            }
-        };
-        worker.addEventListener("message", handler);
-        worker.postMessage({ sync: direction });
+      const handler = e => {
+        if (e.data.synced) {
+          worker.removeEventListener("message", handler);
+          resolve(true);
+        } else if (e.data.syncError) {
+          worker.removeEventListener("message", handler);
+          reject(new Error(e.data.syncError));
+        }
+      };
+      worker.addEventListener("message", handler);
+      worker.postMessage({ sync: direction });
     });
   }
-  
+
   addToRecord(workerId, record) {
     if (!this.workerRecords[workerId]) {
       this.workerRecords[workerId] = []
@@ -173,12 +173,12 @@ class PyodideWorkerManager {
     else if (record.type === "script") {
       return `Script>>>:\n\`\`\`python\n${record.content}\n\`\`\`\n`
     } else if (record.type === "stdout") {
-      if(record.content.trim() === "\n") {
+      if (record.content.trim() === "\n") {
         return "\n"
       }
       return `${record.content}\n`
     } else if (record.type === "stderr") {
-      if(record.content.trim() === "\n") {
+      if (record.content.trim() === "\n") {
         return "\n"
       }
       return `${record.content}\n`
@@ -191,7 +191,7 @@ class PyodideWorkerManager {
 
   renderOutput(container, record) {
     if (record.type === "stdout" || record.type === "stderr") {
-      if(record.content.trim() !== "\n" && record.content.trim() !== ""){
+      if (record.content.trim() !== "\n" && record.content.trim() !== "") {
         const outputEl = document.createElement("pre")
         if (record.type === "stderr") {
           outputEl.style.color = "red"
@@ -236,11 +236,11 @@ class PyodideWorkerManager {
 
   async runScript(workerId, script, ioContext) {
     const outputContainer = ioContext && ioContext.output_container
-    if(outputContainer) {
+    if (outputContainer) {
       delete ioContext.output_container
     }
     const worker = await this.getWorker(workerId)
-    if(worker.terminated){
+    if (worker.terminated) {
       throw new Error("Worker already terminated")
     }
     return new Promise((resolve, reject) => {
@@ -253,8 +253,8 @@ class PyodideWorkerManager {
       const outputs = []
       const handler = e => {
         if (e.data.type !== undefined) {
-          if(!ioContext || !ioContext.skip_record)
-          this.addToRecord(workerId, e.data)
+          if (!ioContext || !ioContext.skip_record)
+            this.addToRecord(workerId, e.data)
           outputs.push(e.data)
           if (outputContainer) {
             this.renderOutput(outputContainer, e.data)
@@ -272,7 +272,7 @@ class PyodideWorkerManager {
         }
       }
       worker.addEventListener("message", handler)
-      if(!ioContext || !ioContext.skip_record)
+      if (!ioContext || !ioContext.skip_record)
         this.addToRecord(workerId, { type: 'script', content: script });
       worker.postMessage({ source: script, io_context: ioContext })
     })
@@ -293,7 +293,7 @@ class PyodideWorkerManager {
       console.error("No records found for worker:", workerId)
       return
     }
-    
+
     let outputSummay = ""
     records.forEach(record => {
       const summary = this.renderOutputSummary(container, record)

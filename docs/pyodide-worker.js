@@ -1,14 +1,14 @@
-const indexURL = 'https://cdn.jsdelivr.net/pyodide/v0.25.0/full/'
+const indexURL = "https://cdn.jsdelivr.net/pyodide/v0.25.0/full/"
 importScripts(`${indexURL}pyodide.js`);
 
 (async () => {
     self.pyodide = await loadPyodide({ indexURL })
     await self.pyodide.loadPackage("micropip");
     const micropip = self.pyodide.pyimport("micropip");
-    await micropip.install(['numpy', 'hypha-rpc', 'kaibu-utils==0.1.14', 'tifffile==2024.7.24', 'pyodide-http']);
+    await micropip.install(["hypha-rpc==0.20.83", "kaibu-utils==0.1.14", "numpy", "pyodide-http", "tifffile==2024.7.24"]);
     // NOTE: We intentionally avoid runPythonAsync here because we don't want this to pre-load extra modules like matplotlib.
     self.pyodide.runPython(setupCode)
-    self.postMessage({loading: true})  // Inform the main thread that we finished loading.
+    self.postMessage({ loading: true })  // Inform the main thread that we finished loading.
 })()
 
 let outputs = []
@@ -20,14 +20,14 @@ function write(type, content) {
 }
 
 function logService(type, url, attrs) {
-    outputs.push({type, content: url, attrs: attrs?.toJs({dict_converter : Object.fromEntries})})
-    self.postMessage({ type, content: url, attrs: attrs?.toJs({dict_converter : Object.fromEntries}) })
+    outputs.push({ type, content: url, attrs: attrs?.toJs({ dict_converter: Object.fromEntries }) })
+    self.postMessage({ type, content: url, attrs: attrs?.toJs({ dict_converter: Object.fromEntries }) })
 }
 
 function show(type, url, attrs) {
     const turl = url.length > 32 ? url.slice(0, 32) + "..." : url
-    outputs.push({type, content: turl, attrs: attrs?.toJs({dict_converter : Object.fromEntries})})
-    self.postMessage({ type, content: url, attrs: attrs?.toJs({dict_converter : Object.fromEntries}) })
+    outputs.push({ type, content: turl, attrs: attrs?.toJs({ dict_converter: Object.fromEntries }) })
+    self.postMessage({ type, content: url, attrs: attrs?.toJs({ dict_converter: Object.fromEntries }) })
 }
 
 function store_put(key, value) {

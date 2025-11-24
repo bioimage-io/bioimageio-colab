@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BioImage.IO Colab</title>
-    <script src="https://cdn.jsdelivr.net/npm/hypha-rpc@latest/dist/hypha-rpc-websocket.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hypha-rpc@0.20.83/dist/hypha-rpc-websocket.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/17.0.2/umd/react.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/17.0.2/umd/react-dom.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
@@ -176,7 +176,7 @@
         const { useState, useEffect } = React;
 
         const serverUrl = "https://hypha.aicell.io";
-        const serviceFile = "data_providing_service.py";
+        const serviceFile = "data_service.py";
         const pluginUrl = "https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/main/plugins/bioimageio-colab-annotator.imjoy.html";  // Update to main branch
         let workerPromise;
 
@@ -185,6 +185,33 @@
             const [isRunning, setIsRunning] = useState(false);
             const [pyodideOutput, setPyodideOutput] = useState([]);
             const [supportedFileTypes, setSupportedFileTypes] = useState([".tiff", ".tif"]);
+            const [artifactManager, setArtifactManager] = useState(null);
+
+            useEffect(() => {
+                async function loadSupportedFileTypes() {
+                    try {
+                        const response = await fetch(`./${serviceFile}`);
+                        const text = await response.text();
+                        const match = text.match(/class ImageFormat\(str, Enum\):([\s\S]*?)(?=\n\n|\n[A-Z]|$)/);
+                        if (match) {
+                            const content = match[1];
+                            const regex = /=\s*"([^"]+)"/g;
+                            let m;
+                            const types = [];
+                            while ((m = regex.exec(content)) !== null) {
+                                types.push("." + m[1]);
+                            }
+                            if (types.length > 0) {
+                                setSupportedFileTypes(types);
+                                console.log("Loaded supported file types:", types);
+                            }
+                        }
+                    } catch (e) {
+                        console.error("Failed to load supported file types", e);
+                    }
+                }
+                loadSupportedFileTypes();
+            }, []);
             const [imageFolderHandle, setImageFolderHandle] = useState(null);
             const [imageList, setImageList] = useState([]);
             const [isLoadingImages, setIsLoadingImages] = useState(false);
@@ -253,6 +280,22 @@
                 }
             };
 
+            const updateAnnotationsList = async () => {
+                setIsLoadingAnnotations(true);
+                try {
+                    const artifactId = localStorage.getItem("dataArtifactId");
+                    if (artifactId && artifactManager) {
+                         const files = await artifactManager.list_files(artifactId, "annotations");
+                         const fileNames = files.map(f => f.name).sort();
+                         setAnnotationsList(fileNames);
+                    }
+                } catch (error) {
+                    console.error("Error listing remote annotations:", error);
+                } finally {
+                    setIsLoadingAnnotations(false);
+                }
+            };
+
             useEffect(() => {
                 if (imageFolderHandle) {
                     window.saveToDB("imageFolderDirHandle", imageFolderHandle);
@@ -263,6 +306,12 @@
                     setAnnotationURL("");
                 }
             }, [imageFolderHandle]);
+
+            useEffect(() => {
+                if (imageFolderHandle) {
+                    updateFileList(imageFolderHandle, setImageList, setIsLoadingImages);
+                }
+            }, [supportedFileTypes]);
 
             const runCode = async (code) => {
                 const pyodideWorker = await workerPromise;
@@ -290,6 +339,7 @@
                         setUser={setUser}
                         activeTab={activeTab}
                         setActiveTab={setActiveTab}
+                        setArtifactManager={setArtifactManager}
                     />
                     <div className="ml-64 flex-1 p-4">
                         <h2 className="text-2xl font-bold mb-4" style={{ height: "2rem", overflow: "hidden" }}>
@@ -305,6 +355,7 @@
                                 user={user}
                                 mountFolder={mountFolder}
                                 updateFileList={updateFileList}
+                                updateAnnotationsList={updateAnnotationsList}
                                 imageFolderHandle={imageFolderHandle}
                                 imageList={imageList}
                                 setImageList={setImageList}
@@ -318,6 +369,20 @@
                                 annotationURL={annotationURL}
                                 setShowSessionModal={setShowSessionModal}
                                 setShowShareModal={setShowShareModal}
+                                setActiveTab={setActiveTab}
+                            />
+                        )}
+
+                        {activeTab === "Finetune Cellpose" && (
+                            <FinetuneCellpose
+                                user={user}
+                                imageFolderHandle={imageFolderHandle}
+                                imageList={imageList}
+                                annotationsFolderHandle={annotationsFolderHandle}
+                                annotationsList={annotationsList}
+                                supportedFileTypes={supportedFileTypes}
+                                setIsRunning={setIsRunning}
+                                runCode={runCode}
                             />
                         )}
 
@@ -357,7 +422,7 @@
             );
         }
 
-        function Sidebar({ user, setUser, activeTab, setActiveTab }) {
+        function Sidebar({ user, setUser, activeTab, setActiveTab, setArtifactManager }) {
             const [isLoggingIn, setIsLoggingIn] = useState(false);
             const [hyphaVersion, setHyphaVersion] = useState("");
 
@@ -400,6 +465,8 @@
                         "server_url": serverUrl,
                         "token": token,
                     });
+                    const artifactManager = await server.getService("public/artifact-manager");
+                    setArtifactManager(artifactManager);
                     setHyphaVersion(server.config.hyphaVersion);
                     setUser(server.config.user);
                     console.log("Logged in as:", server.config.user);
@@ -459,10 +526,16 @@
                             <a href="#" className="text-white"><i className="fas fa-laptop mr-2"></i>Local Session</a>
                         </li>
                         <li
+                            className={`mb-2 p-2 rounded-md cursor-pointer ${activeTab === "Finetune Cellpose" ? "tab-active" : "bg-hover"}`}
+                            onClick={() => setActiveTab("Finetune Cellpose")}
+                        >
+                            <a href="#" className="text-white"><i className="fas fa-brain mr-2"></i>Finetune Cellpose</a>
+                        </li>
+                        <li
                             className={`mb-2 p-2 rounded-md cursor-pointer ${activeTab === "Remote Deployment" ? "tab-active" : "bg-hover"}`}
                             onClick={() => setActiveTab("Remote Deployment")}
                         >
-                            <a href="#" className="text-white"><i className="fas fa-cloud-upload-alt mr-2"></i>Remote Deployment</a>
+                            <a href="#" className="text-white"><i className="fas fa-server mr-2"></i>Remote Deployment</a>
                         </li>
                         <li
                             className={`mb-2 p-2 rounded-md cursor-pointer ${activeTab === "Community Annotations" ? "tab-active" : "bg-hover"}`}
@@ -486,6 +559,7 @@
             user,
             mountFolder,
             updateFileList,
+            updateAnnotationsList,
             imageFolderHandle,
             imageList,
             setImageList,
@@ -499,6 +573,7 @@
             annotationURL,
             setShowSessionModal,
             setShowShareModal,
+            setActiveTab,
         }) {
             const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -511,12 +586,9 @@
                 );
             };
             const updateAnnotations = async () => {
-                await updateFileList(
-                    annotationsFolderHandle,
-                    setAnnotationsList,
-                    setIsLoadingAnnotations,
-                    "browser-to-native"
-                );
+                if (updateAnnotationsList) {
+                    await updateAnnotationsList();
+                }
             };
 
             const createAnnotationSession = async () => {
@@ -611,6 +683,18 @@
                             <i className="fas fa-share-alt mr-2"></i>
                             Share Annotation URL
                         </button>
+                        <span className="mx-2 text-xl">→</span>
+
+                        <div className="text-xl font-semibold mr-2">4.</div>
+                        <button
+                            className={`${annotationsList.length > 0 ? "bg-green btn-click-effect" : "bg-disabled-button"
+                                } text-white px-4 py-2 rounded-md`}
+                            onClick={() => setActiveTab("Finetune Cellpose")}
+                            disabled={annotationsList.length === 0}
+                        >
+                            <i className="fas fa-brain mr-2"></i>
+                            Finetune Model
+                        </button>
                     </div>
 
                     <div className="flex space-x-4">
@@ -650,7 +734,7 @@
                                 )}
                             </div>
                         )}
-                        {annotationsFolderHandle && (
+                        {imageFolderHandle && (
                             <div
                                 className="w-1/2 bg-primary p-4 rounded-md overflow-auto"
                                 style={{ maxHeight: `calc(100vh - ${topHight}px)`}}
@@ -763,6 +847,322 @@
             );
         }
 
+        function FinetuneCellpose({
+            user,
+            imageFolderHandle,
+            imageList,
+            annotationsFolderHandle,
+            annotationsList,
+            supportedFileTypes,
+            setIsRunning,
+            runCode,
+        }) {
+            const [isUploading, setIsUploading] = useState(false);
+            const [uploadStatus, setUploadStatus] = useState("");
+            const [artifactId, setArtifactId] = useState("");
+            
+            // Finetuning state
+            const [isFinetuning, setIsFinetuning] = useState(false);
+            const [finetuneStatus, setFinetuneStatus] = useState("");
+            const [baseModel, setBaseModel] = useState(localStorage.getItem("baseModel") || "cyto3");
+            const [nEpochs, setNEpochs] = useState(localStorage.getItem("nEpochs") || "10");
+            const [learningRate, setLearningRate] = useState(localStorage.getItem("learningRate") || "1e-6");
+            const [sessionId, setSessionId] = useState("");
+
+            // Reset artifact ID when folder changes
+            useEffect(() => {
+                setArtifactId("");
+                setUploadStatus("");
+            }, [imageFolderHandle]);
+
+            const uploadAnnotations = async () => {
+                if (!user.email) {
+                    alert("Please login first");
+                    return;
+                }
+
+                if (!imageFolderHandle || !annotationsFolderHandle) {
+                    alert("Please mount a local folder with annotations first (Local Session tab)");
+                    return;
+                }
+
+                if (imageList.length === 0 || annotationsList.length === 0) {
+                    alert("No images or annotations found to upload");
+                    return;
+                }
+
+                setIsUploading(true);
+                setUploadStatus(artifactId ? "Updating artifact..." : "Creating new artifact...");
+
+                try {
+                    const token = localStorage.getItem("token");
+                    setIsRunning(true);
+
+                    // Load the service code
+                    const code = await fetch(`./${serviceFile}`).then(response => response.text());
+                    await runCode(code);
+
+                    // Mount the folders to the pyodide worker
+                    const pyodideWorker = await workerPromise;
+                    await pyodideWorker.mount("/mnt", imageFolderHandle);
+
+                    setUploadStatus("Uploading data to artifact...");
+
+                    // Prepare the supported file types
+                    const supportedFileTypesJson = JSON.stringify(supportedFileTypes).replace(/"/g, '\\"');
+
+                    // Call create_data_artifact - use existing artifact ID if available, otherwise create new
+                    const artifactIdParam = artifactId ? `"${artifactId}"` : "None";
+                    const outputs = await runCode(
+                        `await create_data_artifact("${serverUrl}", "${token}", ${artifactIdParam}, "/mnt", "/mnt/annotations", "${supportedFileTypesJson}")`
+                    );
+
+                    // Extract the artifact ID from the output
+                    const returnOutput = outputs.find(output => output.type === "return");
+                    if (returnOutput && returnOutput.value) {
+                        const newArtifactId = returnOutput.value;
+                        setArtifactId(newArtifactId);
+                        setUploadStatus(`Successfully ${artifactId ? 'updated' : 'created'} artifact: ${newArtifactId}`);
+                        return newArtifactId;
+                    } else {
+                        setUploadStatus("Upload completed, but artifact ID not found in output");
+                        return null;
+                    }
+                } catch (error) {
+                    console.error("Error uploading annotations:", error);
+                    setUploadStatus(`Error: ${error.message}`);
+                    return null;
+                } finally {
+                    setIsRunning(false);
+                    setIsUploading(false);
+                }
+            };
+
+            const startFinetuning = async () => {
+                if (!artifactId) {
+                    alert("Please upload annotations first to create an artifact");
+                    return;
+                }
+
+                if (!user.email) {
+                    alert("Please login first");
+                    return;
+                }
+
+                setIsFinetuning(true);
+                setFinetuneStatus("Starting finetuning...");
+
+                try {
+                    const token = localStorage.getItem("token");
+                    setIsRunning(true);
+
+                    // Load the service code if not already loaded
+                    const code = await fetch(`./${serviceFile}`).then(response => response.text());
+                    await runCode(code);
+
+                    setFinetuneStatus("Submitting training job...");
+
+                    // Call finetune_cellpose
+                    const outputs = await runCode(
+                        `await finetune_cellpose("${serverUrl}", "${token}", "${artifactId}", "${baseModel}")`
+                    );
+
+                    // Extract the session ID from the output
+                    const returnOutput = outputs.find(output => output.type === "return");
+                    if (returnOutput && returnOutput.value) {
+                        const newSessionId = returnOutput.value;
+                        setSessionId(newSessionId);
+                        setFinetuneStatus(`Training completed! Session ID: ${newSessionId}`);
+                    } else {
+                        setFinetuneStatus("Training process completed");
+                    }
+                } catch (error) {
+                    console.error("Error finetuning model:", error);
+                    setFinetuneStatus(`Error: ${error.message}`);
+                } finally {
+                    setIsRunning(false);
+                    setIsFinetuning(false);
+                }
+            };
+
+            // Save model parameters to localStorage
+            useEffect(() => {
+                localStorage.setItem("baseModel", baseModel);
+                localStorage.setItem("nEpochs", nEpochs);
+                localStorage.setItem("learningRate", learningRate);
+            }, [baseModel, nEpochs, learningRate]);
+
+            // Calculate number of images with annotations
+            const getImagesWithAnnotations = () => {
+                const imagesWithAnnotations = new Set();
+                annotationsList.forEach(annotationFile => {
+                    // Extract image name from annotation file (e.g., "image_name_mask_1.tif" -> "image_name")
+                    const match = annotationFile.match(/^(.+)_mask_\d+\.(tif|tiff)$/i);
+                    if (match) {
+                        const imageName = match[1];
+                        // Check if corresponding image exists
+                        const hasImage = imageList.some(img => {
+                            const imgNameWithoutExt = img.replace(/\.(tif|tiff)$/i, '');
+                            return imgNameWithoutExt === imageName;
+                        });
+                        if (hasImage) {
+                            imagesWithAnnotations.add(imageName);
+                        }
+                    }
+                });
+                return imagesWithAnnotations.size;
+            };
+
+            const imagesWithAnnotationsCount = getImagesWithAnnotations();
+
+            return (
+                <div>
+                    <div className="info-box mb-4">
+                        <div className="info-box-title">
+                            <i className="fas fa-brain mr-2"></i>Finetune Cellpose Model
+                        </div>
+                        <p className="info-box-text mt-2">
+                            Upload your locally collected annotations to create a training dataset, then finetune a Cellpose model
+                            with your custom annotations. The process involves two steps: first uploading data to create an artifact,
+                            then starting the finetuning job on the remote server.
+                        </p>
+                    </div>
+
+                    {/* Step 1: Upload Annotations */}
+                    <div className="bg-white shadow-md rounded-lg p-6 mb-4">
+                        <h3 className="text-xl font-semibold mb-4">
+                            <span className="bg-purple text-white rounded-full w-8 h-8 inline-flex items-center justify-center mr-2">1</span>
+                            Upload Training Data
+                        </h3>
+                        <div className="mb-4">
+                            <p className="text-gray-700 mb-2">
+                                <strong>Images with annotations:</strong> {imagesWithAnnotationsCount} files
+                            </p>
+                            <p className="text-gray-700 mb-2">
+                                <strong>Annotation masks:</strong> {annotationsList.length} files
+                            </p>
+                            {artifactId && (
+                                <p className="text-gray-700 mb-2">
+                                    <strong>Artifact ID:</strong> {artifactId}
+                                </p>
+                            )}
+                        </div>
+
+                        {uploadStatus && (
+                            <div className={`p-4 rounded-md mb-4 ${uploadStatus.startsWith("Error") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                                {uploadStatus}
+                            </div>
+                        )}
+
+                        <button
+                            className={`${!isUploading && !isFinetuning && imageList.length > 0 && annotationsList.length > 0 ? "bg-purple btn-click-effect" : "bg-disabled-button"} text-white px-6 py-3 rounded-md flex items-center`}
+                            onClick={uploadAnnotations}
+                            disabled={isUploading || isFinetuning || imageList.length === 0 || annotationsList.length === 0}
+                        >
+                            {isUploading ? (
+                                <i className="fas fa-spinner fa-spin mr-2"></i>
+                            ) : (
+                                <i className={`fas ${artifactId ? 'fa-sync-alt' : 'fa-cloud-upload-alt'} mr-2`}></i>
+                            )}
+                            {isUploading ? 'Uploading...' : (artifactId ? 'Update Training Data' : 'Upload Training Data')}
+                        </button>
+                    </div>
+
+                    {/* Step 2: Finetune Model */}
+                    <div className="bg-white shadow-md rounded-lg p-6 mb-4">
+                        <h3 className="text-xl font-semibold mb-4">
+                            <span className="bg-purple text-white rounded-full w-8 h-8 inline-flex items-center justify-center mr-2">2</span>
+                            Start Finetuning
+                        </h3>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Base Model:
+                                </label>
+                                <select
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                    value={baseModel}
+                                    onChange={(e) => setBaseModel(e.target.value)}
+                                    disabled={isUploading || isFinetuning}
+                                >
+                                    <option value="cyto3">cyto3</option>
+                                    <option value="cyto2">cyto2</option>
+                                    <option value="cyto">cyto</option>
+                                    <option value="nuclei">nuclei</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Number of Epochs:
+                                </label>
+                                <input
+                                    type="number"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                    value={nEpochs}
+                                    onChange={(e) => setNEpochs(e.target.value)}
+                                    min="1"
+                                    max="100"
+                                    disabled={isUploading || isFinetuning}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Learning Rate:
+                                </label>
+                                <input
+                                    type="text"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                    value={learningRate}
+                                    onChange={(e) => setLearningRate(e.target.value)}
+                                    placeholder="1e-6"
+                                    disabled={isUploading || isFinetuning}
+                                />
+                            </div>
+                        </div>
+
+                        {finetuneStatus && (
+                            <div className={`p-4 rounded-md mb-4 ${finetuneStatus.startsWith("Error") ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"}`}>
+                                {finetuneStatus}
+                            </div>
+                        )}
+
+                        {sessionId && (
+                            <div className="p-4 rounded-md mb-4 bg-green-100 text-green-700">
+                                <strong>Training Session ID:</strong> {sessionId}
+                            </div>
+                        )}
+
+                        <button
+                            className={`${!isUploading && !isFinetuning && artifactId ? "bg-green btn-click-effect" : "bg-disabled-button"} text-white px-6 py-3 rounded-md`}
+                            onClick={startFinetuning}
+                            disabled={isUploading || isFinetuning || !artifactId}
+                        >
+                            <i className="fas fa-play-circle mr-2"></i>
+                            Start Finetuning
+                        </button>
+                    </div>
+
+                    <div className="info-box">
+                        <div className="info-box-title">
+                            <i className="fas fa-info-circle mr-2"></i>How it works
+                        </div>
+                        <ul className="info-box-text mt-2 list-disc list-inside space-y-1">
+                            <li><strong>Step 1:</strong> Upload your images and annotations to create a training artifact</li>
+                            <li>Images and masks are converted to numpy format and paired automatically</li>
+                            <li><strong>Step 2:</strong> Configure and start the Cellpose finetuning job</li>
+                            <li>Select a base model (cyto3 recommended for cell segmentation)</li>
+                            <li>Adjust training parameters like epochs and learning rate</li>
+                            <li>The training runs on a remote server and you'll receive a session ID to track progress</li>
+                            <li>Once complete, your finetuned model can be used for inference</li>
+                        </ul>
+                    </div>
+                </div>
+            );
+        }
+
         function SessionModal({
             setShowSessionModal,
             updateFileList,
@@ -787,17 +1187,6 @@
                 localStorage.setItem("sessionName", sessionName);
                 localStorage.setItem("sessionDescription", sessionDescription);
 
-                // Create annotations folder
-                try {
-                    const annotationsFolder = await imageFolderHandle.getDirectoryHandle("annotations", { create: true });
-                    setAnnotationsFolderHandle(annotationsFolder);
-                    await updateFileList(annotationsFolder, setAnnotationsList, setIsLoadingAnnotations);
-                    console.log("Created annotations folder:", annotationsFolder.name);
-                } catch (error) {
-                    console.error("Error creating annotations folder:", error);
-                    throw error;
-                }
-
                 // Start annotation session
                 try {
                     setIsRunning(true);
@@ -808,17 +1197,29 @@
                     const pyodideWorker = await workerPromise;
                     await pyodideWorker.mount("/mnt", imageFolderHandle);
                     // Register the service
-                    const supportedFileTypesJson = JSON.stringify(supportedFileTypes).replace(/"/g, '\\"');
                     const outputs = await runCode(
-                        `await register_service("${serverUrl}", "${token}", "${supportedFileTypesJson}", "${sessionName}", "${sessionDescription}")`
+                        `await register_service(server_url="${serverUrl}", token="${token}", name="${sessionName}", description="${sessionDescription}")`
                     );
-                    const serviceOutput = outputs.find(output => output.type === "service");
-                    if (!serviceOutput) {
-                        console.error("Service output not found:", outputs);
+
+                    const artifactIdOutput = outputs.find(output => output.type === "stdout" && output.content.includes("Data Artifact ID:"));
+                    const artifactId = artifactIdOutput ? artifactIdOutput.content.split("Data Artifact ID:")[1].trim() : null;
+
+                    if (!artifactId) {
+                       console.error("Artifact ID not found in outputs:", outputs);
+                        throw new Error("Something went wrong while registering the service."); 
+                    }
+                    console.log("Data Artifact ID:", artifactId);
+                    localStorage.setItem("dataArtifactId", artifactId);
+
+                    const serviceIdOutput = outputs.find(output => output.type === "stdout" && output.content.includes("Data Provider Service ID:"));
+                    const annotationSid = serviceIdOutput ? serviceIdOutput.content.split("Data Provider Service ID:")[1].trim() : null;
+
+                    if (!annotationSid) {
+                        console.error("Service ID not found in outputs:", outputs);
                         throw new Error("Something went wrong while registering the service.");
                     }
-                    const annotationSid = serviceOutput.attrs.id;
                     console.log("Annotation Service ID:", annotationSid);
+
                     // Create the annotator URL
                     const configStr = `{"serverUrl": "${serverUrl}", "imageProviderId": "${annotationSid}"}`;  // "token": "${token}"
                     const encodedConfig = encodeURIComponent(configStr);
