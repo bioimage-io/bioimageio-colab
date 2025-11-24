@@ -185,6 +185,7 @@
             const [isRunning, setIsRunning] = useState(false);
             const [pyodideOutput, setPyodideOutput] = useState([]);
             const [supportedFileTypes, setSupportedFileTypes] = useState([".tiff", ".tif"]);
+            const [pretrainedModels, setPretrainedModels] = useState(["cyto3"]);
             const [artifactManager, setArtifactManager] = useState(null);
 
             useEffect(() => {
@@ -206,8 +207,23 @@
                                 console.log("Loaded supported file types:", types);
                             }
                         }
+                        
+                        const modelMatch = text.match(/class PretrainedCellposeModel\(str, Enum\):([\s\S]*?)(?=\n\n|\n[A-Z]|$)/);
+                        if (modelMatch) {
+                            const content = modelMatch[1];
+                            const regex = /=\s*"([^"]+)"/g;
+                            let m;
+                            const models = [];
+                            while ((m = regex.exec(content)) !== null) {
+                                models.push(m[1]);
+                            }
+                            if (models.length > 0) {
+                                setPretrainedModels(models);
+                                console.log("Loaded pretrained models:", models);
+                            }
+                        }
                     } catch (e) {
-                        console.error("Failed to load supported file types", e);
+                        console.error("Failed to load supported file types or models", e);
                     }
                 }
                 loadSupportedFileTypes();
@@ -383,6 +399,7 @@
                                 supportedFileTypes={supportedFileTypes}
                                 setIsRunning={setIsRunning}
                                 runCode={runCode}
+                                pretrainedModels={pretrainedModels}
                             />
                         )}
 
@@ -856,10 +873,9 @@
             supportedFileTypes,
             setIsRunning,
             runCode,
+            pretrainedModels,
         }) {
-            const [isUploading, setIsUploading] = useState(false);
-            const [uploadStatus, setUploadStatus] = useState("");
-            const [artifactId, setArtifactId] = useState("");
+            const [artifactId, setArtifactId] = useState(localStorage.getItem("dataArtifactId") || "");
             
             // Finetuning state
             const [isFinetuning, setIsFinetuning] = useState(false);
@@ -869,78 +885,14 @@
             const [learningRate, setLearningRate] = useState(localStorage.getItem("learningRate") || "1e-6");
             const [sessionId, setSessionId] = useState("");
 
-            // Reset artifact ID when folder changes
             useEffect(() => {
-                setArtifactId("");
-                setUploadStatus("");
-            }, [imageFolderHandle]);
-
-            const uploadAnnotations = async () => {
-                if (!user.email) {
-                    alert("Please login first");
-                    return;
-                }
-
-                if (!imageFolderHandle || !annotationsFolderHandle) {
-                    alert("Please mount a local folder with annotations first (Local Session tab)");
-                    return;
-                }
-
-                if (imageList.length === 0 || annotationsList.length === 0) {
-                    alert("No images or annotations found to upload");
-                    return;
-                }
-
-                setIsUploading(true);
-                setUploadStatus(artifactId ? "Updating artifact..." : "Creating new artifact...");
-
-                try {
-                    const token = localStorage.getItem("token");
-                    setIsRunning(true);
-
-                    // Load the service code
-                    const code = await fetch(`./${serviceFile}`).then(response => response.text());
-                    await runCode(code);
-
-                    // Mount the folders to the pyodide worker
-                    const pyodideWorker = await workerPromise;
-                    await pyodideWorker.mount("/mnt", imageFolderHandle);
-
-                    setUploadStatus("Uploading data to artifact...");
-
-                    // Prepare the supported file types
-                    const supportedFileTypesJson = JSON.stringify(supportedFileTypes).replace(/"/g, '\\"');
-
-                    // Call create_data_artifact - use existing artifact ID if available, otherwise create new
-                    const artifactIdParam = artifactId ? `"${artifactId}"` : "None";
-                    const outputs = await runCode(
-                        `await create_data_artifact("${serverUrl}", "${token}", ${artifactIdParam}, "/mnt", "/mnt/annotations", "${supportedFileTypesJson}")`
-                    );
-
-                    // Extract the artifact ID from the output
-                    const returnOutput = outputs.find(output => output.type === "return");
-                    if (returnOutput && returnOutput.value) {
-                        const newArtifactId = returnOutput.value;
-                        setArtifactId(newArtifactId);
-                        setUploadStatus(`Successfully ${artifactId ? 'updated' : 'created'} artifact: ${newArtifactId}`);
-                        return newArtifactId;
-                    } else {
-                        setUploadStatus("Upload completed, but artifact ID not found in output");
-                        return null;
-                    }
-                } catch (error) {
-                    console.error("Error uploading annotations:", error);
-                    setUploadStatus(`Error: ${error.message}`);
-                    return null;
-                } finally {
-                    setIsRunning(false);
-                    setIsUploading(false);
-                }
-            };
+                const id = localStorage.getItem("dataArtifactId");
+                if (id) setArtifactId(id);
+            }, []);
 
             const startFinetuning = async () => {
                 if (!artifactId) {
-                    alert("Please upload annotations first to create an artifact");
+                    alert("No data artifact found. Please create an annotation session first.");
                     return;
                 }
 
@@ -992,29 +944,6 @@
                 localStorage.setItem("learningRate", learningRate);
             }, [baseModel, nEpochs, learningRate]);
 
-            // Calculate number of images with annotations
-            const getImagesWithAnnotations = () => {
-                const imagesWithAnnotations = new Set();
-                annotationsList.forEach(annotationFile => {
-                    // Extract image name from annotation file (e.g., "image_name_mask_1.tif" -> "image_name")
-                    const match = annotationFile.match(/^(.+)_mask_\d+\.(tif|tiff)$/i);
-                    if (match) {
-                        const imageName = match[1];
-                        // Check if corresponding image exists
-                        const hasImage = imageList.some(img => {
-                            const imgNameWithoutExt = img.replace(/\.(tif|tiff)$/i, '');
-                            return imgNameWithoutExt === imageName;
-                        });
-                        if (hasImage) {
-                            imagesWithAnnotations.add(imageName);
-                        }
-                    }
-                });
-                return imagesWithAnnotations.size;
-            };
-
-            const imagesWithAnnotationsCount = getImagesWithAnnotations();
-
             return (
                 <div>
                     <div className="info-box mb-4">
@@ -1022,58 +951,23 @@
                             <i className="fas fa-brain mr-2"></i>Finetune Cellpose Model
                         </div>
                         <p className="info-box-text mt-2">
-                            Upload your locally collected annotations to create a training dataset, then finetune a Cellpose model
-                            with your custom annotations. The process involves two steps: first uploading data to create an artifact,
-                            then starting the finetuning job on the remote server.
+                            Finetune a Cellpose model with your annotations. The process involves configuring and starting the finetuning job on the remote server.
                         </p>
                     </div>
 
-                    {/* Step 1: Upload Annotations */}
                     <div className="bg-white shadow-md rounded-lg p-6 mb-4">
                         <h3 className="text-xl font-semibold mb-4">
-                            <span className="bg-purple text-white rounded-full w-8 h-8 inline-flex items-center justify-center mr-2">1</span>
-                            Upload Training Data
-                        </h3>
-                        <div className="mb-4">
-                            <p className="text-gray-700 mb-2">
-                                <strong>Images with annotations:</strong> {imagesWithAnnotationsCount} files
-                            </p>
-                            <p className="text-gray-700 mb-2">
-                                <strong>Annotation masks:</strong> {annotationsList.length} files
-                            </p>
-                            {artifactId && (
-                                <p className="text-gray-700 mb-2">
-                                    <strong>Artifact ID:</strong> {artifactId}
-                                </p>
-                            )}
-                        </div>
-
-                        {uploadStatus && (
-                            <div className={`p-4 rounded-md mb-4 ${uploadStatus.startsWith("Error") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
-                                {uploadStatus}
-                            </div>
-                        )}
-
-                        <button
-                            className={`${!isUploading && !isFinetuning && imageList.length > 0 && annotationsList.length > 0 ? "bg-purple btn-click-effect" : "bg-disabled-button"} text-white px-6 py-3 rounded-md flex items-center`}
-                            onClick={uploadAnnotations}
-                            disabled={isUploading || isFinetuning || imageList.length === 0 || annotationsList.length === 0}
-                        >
-                            {isUploading ? (
-                                <i className="fas fa-spinner fa-spin mr-2"></i>
-                            ) : (
-                                <i className={`fas ${artifactId ? 'fa-sync-alt' : 'fa-cloud-upload-alt'} mr-2`}></i>
-                            )}
-                            {isUploading ? 'Uploading...' : (artifactId ? 'Update Training Data' : 'Upload Training Data')}
-                        </button>
-                    </div>
-
-                    {/* Step 2: Finetune Model */}
-                    <div className="bg-white shadow-md rounded-lg p-6 mb-4">
-                        <h3 className="text-xl font-semibold mb-4">
-                            <span className="bg-purple text-white rounded-full w-8 h-8 inline-flex items-center justify-center mr-2">2</span>
                             Start Finetuning
                         </h3>
+
+                        <div className="mb-4">
+                            <p className="text-gray-700 mb-2">
+                                <strong>Data Artifact ID:</strong> {artifactId || "Not found"}
+                            </p>
+                            <p className="text-gray-700 mb-2">
+                                <strong>Remote Annotations:</strong> {annotationsList.length} files
+                            </p>
+                        </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                             <div>
@@ -1084,12 +978,20 @@
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md"
                                     value={baseModel}
                                     onChange={(e) => setBaseModel(e.target.value)}
-                                    disabled={isUploading || isFinetuning}
+                                    disabled={isFinetuning}
                                 >
-                                    <option value="cyto3">cyto3</option>
-                                    <option value="cyto2">cyto2</option>
-                                    <option value="cyto">cyto</option>
-                                    <option value="nuclei">nuclei</option>
+                                    {pretrainedModels && pretrainedModels.length > 0 ? (
+                                        pretrainedModels.map(model => (
+                                            <option key={model} value={model}>{model}</option>
+                                        ))
+                                    ) : (
+                                        <>
+                                            <option value="cyto3">cyto3</option>
+                                            <option value="cyto2">cyto2</option>
+                                            <option value="cyto">cyto</option>
+                                            <option value="nuclei">nuclei</option>
+                                        </>
+                                    )}
                                 </select>
                             </div>
 
@@ -1104,7 +1006,7 @@
                                     onChange={(e) => setNEpochs(e.target.value)}
                                     min="1"
                                     max="100"
-                                    disabled={isUploading || isFinetuning}
+                                    disabled={isFinetuning}
                                 />
                             </div>
 
@@ -1118,7 +1020,7 @@
                                     value={learningRate}
                                     onChange={(e) => setLearningRate(e.target.value)}
                                     placeholder="1e-6"
-                                    disabled={isUploading || isFinetuning}
+                                    disabled={isFinetuning}
                                 />
                             </div>
                         </div>
@@ -1136,9 +1038,9 @@
                         )}
 
                         <button
-                            className={`${!isUploading && !isFinetuning && artifactId ? "bg-green btn-click-effect" : "bg-disabled-button"} text-white px-6 py-3 rounded-md`}
+                            className={`${!isFinetuning && artifactId ? "bg-green btn-click-effect" : "bg-disabled-button"} text-white px-6 py-3 rounded-md`}
                             onClick={startFinetuning}
-                            disabled={isUploading || isFinetuning || !artifactId}
+                            disabled={isFinetuning || !artifactId}
                         >
                             <i className="fas fa-play-circle mr-2"></i>
                             Start Finetuning
@@ -1150,13 +1052,12 @@
                             <i className="fas fa-info-circle mr-2"></i>How it works
                         </div>
                         <ul className="info-box-text mt-2 list-disc list-inside space-y-1">
-                            <li><strong>Step 1:</strong> Upload your images and annotations to create a training artifact</li>
-                            <li>Images and masks are converted to numpy format and paired automatically</li>
-                            <li><strong>Step 2:</strong> Configure and start the Cellpose finetuning job</li>
-                            <li>Select a base model (cyto3 recommended for cell segmentation)</li>
-                            <li>Adjust training parameters like epochs and learning rate</li>
-                            <li>The training runs on a remote server and you'll receive a session ID to track progress</li>
-                            <li>Once complete, your finetuned model can be used for inference</li>
+                            <li><strong>Step 1:</strong> Ensure you have created an annotation session and have annotations in the remote artifact.</li>
+                            <li><strong>Step 2:</strong> Configure and start the Cellpose finetuning job.</li>
+                            <li>Select a base model (cyto3 recommended for cell segmentation).</li>
+                            <li>Adjust training parameters like epochs and learning rate.</li>
+                            <li>The training runs on a remote server and you'll receive a session ID to track progress.</li>
+                            <li>Once complete, your finetuned model can be used for inference.</li>
                         </ul>
                     </div>
                 </div>
