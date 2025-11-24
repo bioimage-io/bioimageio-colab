@@ -1,5 +1,6 @@
 import asyncio
 import io
+import sys
 import time
 from enum import Enum
 from functools import partial
@@ -13,6 +14,13 @@ from hypha_rpc.rpc import ObjectProxy
 from kaibu_utils import features_to_mask
 from PIL import Image
 from tifffile import imread
+
+IS_PYODIDE = "pyodide" in sys.modules
+
+if IS_PYODIDE:
+    import pyodide_http
+    pyodide_http.patch_all()
+
 
 WORKSPACE = "bioimage-io"
 COLLECTION_ID = "bioimage-io/colab-annotations"
@@ -117,8 +125,12 @@ async def get_image(
     if not image_exists:
         upload_url = await artifact_manager.put_file(artifact_id, file_path=f"images/{image_name}")
 
-        async with httpx.AsyncClient() as client:
-            await client.put(upload_url, content=img_bytes)
+        if IS_PYODIDE:
+            import pyodide.http
+            await pyodide.http.pyfetch(upload_url, method="PUT", body=img_bytes)
+        else:
+            async with httpx.AsyncClient() as client:
+                await client.put(upload_url, content=img_bytes)
 
     artifact_alias = artifact_id.split("/")[-1]
     image_url = f"{server_url}/{WORKSPACE}/artifacts/{artifact_alias}/files/images/{image_name}"
@@ -152,8 +164,12 @@ async def save_annotation(
 
     upload_url = await artifact_manager.put_file(artifact_id, file_path=upload_path)
 
-    async with httpx.AsyncClient() as client:
-        await client.put(upload_url, content=mask_bytes)
+    if IS_PYODIDE:
+        import pyodide.http
+        await pyodide.http.pyfetch(upload_url, method="PUT", body=mask_bytes)
+    else:
+        async with httpx.AsyncClient() as client:
+            await client.put(upload_url, content=mask_bytes)
 
 
 async def register_service(
@@ -290,8 +306,12 @@ async def create_annotations_json(
     file_path = "annotations.json"
     upload_url = await artifact_manager.put_file(artifact_id, file_path=file_path)
 
-    async with httpx.AsyncClient() as client:
-        await client.put(upload_url, content=json_str.encode("utf-8"))
+    if IS_PYODIDE:
+        import pyodide.http
+        await pyodide.http.pyfetch(upload_url, method="PUT", body=json_str.encode("utf-8"))
+    else:
+        async with httpx.AsyncClient() as client:
+            await client.put(upload_url, content=json_str.encode("utf-8"))
 
 
 async def finetune_cellpose(
