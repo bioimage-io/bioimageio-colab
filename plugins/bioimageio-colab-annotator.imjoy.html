@@ -276,8 +276,7 @@ const addMaskToLayer = async ({ annotationLayer, masks, edgeColor }) => {
 
 const setAnnotationLayer = async ({ viewer, edgeColor, embeddingPromise, modelPromise }) => {
     // Add the annotation functionality to the interface
-    let annotationLayer
-    annotationLayer = await viewer.add_shapes([], {
+    let annotationLayer = await viewer.add_shapes([], {
         name: "annotation",
         shape_type: "polygon",
         draw_enable: true,
@@ -312,31 +311,25 @@ const setAnnotationLayer = async ({ viewer, edgeColor, embeddingPromise, modelPr
     return annotationLayer;
 };
 
-const saveAnnotation = async ({ dataService, imageLayer, annotationLayer }) => {
-    // Do not save if no data service or annotation layer is available
-
+const saveAnnotation = async ({ dataService, filename, annotation, dimensions }) => {
+    // Skip saving if no data service is provided
     if (!dataService) {
         const msg = "No data service provided. Saving was skipped.";
         console.log(msg);
         await api.showMessage(msg);
         return;
     }
-    // Get the annotation features from the layer
-    if (!annotationLayer) {
-        const msg = "No annotation provided. Saving was skipped.";
-        console.log(msg);
-        await api.showMessage(msg);
-        return;
-    }
-    const annotation = await annotationLayer.get_features();
-    if (annotation.features.length > 0) {
-        const filename = imageLayer.name
-        const image = await imageLayer.get_image();
-        const dimensions = await image.getDimensions();
-        await dataService.save_annotation(filename, annotation, [dimensions[0], dimensions[1]]);
-        const msg = "Annotation saved.";
-        console.log(msg);
-        await api.showMessage(msg);
+
+    if (annotation && annotation.features.length > 0) {
+        try {
+            await dataService.save_annotation(filename, annotation, dimensions);
+            const msg = "Annotation saved.";
+            console.log(msg);
+            await api.showMessage(msg);
+        } catch (e) {
+            console.error(e);
+            await api.showMessage("Failed to save annotation.");
+        }
     } else {
         const msg = "No annotation provided. Saving was skipped.";
         console.log(msg);
@@ -372,16 +365,37 @@ class BioImageIOColabAnnotator {
         };
 
         // Function to load an image and display it in the viewer with the annotation layer
-        const setImageAnnotation = async () => {
-            // First remove existing layers from the viewer
+        const loadNewImage = async () => {
+            // Save the current annotation in the background (if available)
+            if (this.imageLayer && this.annotationLayer) {
+                try {
+                    const filename = this.imageLayer.name;
+                    const annotation = await this.annotationLayer.get_features();
+                    const image = await this.imageLayer.get_image();
+                    const dimensions = await image.getDimensions();
+                    
+                    saveAnnotation({
+                        dataService: dataService,
+                        filename: filename,
+                        annotation: annotation,
+                        dimensions: [dimensions[0], dimensions[1]]
+                    });
+                } catch (e) {
+                    console.error("Error preparing annotation for save:", e);
+                }
+            }
+
+            // Remove existing layers from the viewer and reset embedding promise
             await viewer.clear_layers();
-            // Then load new image and annotation layers
+
+            // Then load new image layer
             this.imageLayer = await setImageLayer({
                 viewer: viewer,
                 dataService: dataService,
             });
             const image = await getImageFromLayer({ imageLayer: this.imageLayer });
 
+            // Start computing the embedding
             let embeddingPromise = null;
             if (samService) {
                 embeddingPromise = computeEmbedding({
@@ -392,24 +406,14 @@ class BioImageIOColabAnnotator {
             } else if (this.imageLayer.name === exampleImages[0].name) {
                 embeddingPromise = loadPrecomputedEmbedding({ image: image });
             }
+
+            // Set new annotation layer
             this.annotationLayer = await setAnnotationLayer({
                 viewer: viewer,
                 edgeColor: this.edgeColor,
                 embeddingPromise: embeddingPromise,
                 modelPromise: this.modelPromise,
             });
-        };
-
-        // Function to load the next image
-        const nextImage = async () => {
-            // Save the current annotation if available
-            await saveAnnotation({
-                dataService: dataService,
-                imageLayer: this.imageLayer,
-                annotationLayer: this.annotationLayer,
-            });
-            // Load the next image
-            await setImageAnnotation();
         };
 
         // Add a control widget with a button to load the next image
@@ -421,14 +425,14 @@ class BioImageIOColabAnnotator {
                 {
                     type: "button",
                     label: "Save Annotation",
-                    callback: nextImage,
+                    callback: loadNewImage,
                 }
             ],
         });
 
         // Start loading the model and the first image
         await setModel();
-        await setImageAnnotation();
+        await loadNewImage();
         await api.showMessage("Ready to annotate!");
     }
 }
