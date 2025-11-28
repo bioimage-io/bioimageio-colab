@@ -6,7 +6,7 @@ This is a work-in-progress project to support **collaborative data annotation in
 
 Experience the power of the Segment Anything Model (SAM) in your browser: [Launch Demo](https://imjoy.io/lite?plugin=https://raw.githubusercontent.com/bioimage-io/bioimageio-colab/refs/heads/main/plugins/bioimageio-colab-annotator.imjoy.html). This demo showcases interactive segmentation with SAM on an example image.
 
-For collaborative annotation sessions with your own data and the ability to save annotations, visit our [Web Interface](https://bioimage-io.github.io/bioimageio-colab/).
+For collaborative annotation sessions with your own data and the ability to save annotations, visit our [Web Interface](https://bioimage.io/#/colab).
 
 ### Components
 
@@ -20,7 +20,7 @@ BioImageIO Colab combines two powerful tools:
    - Images are sent from Data Provider to Collaborators
    - Annotations are sent back to Data Provider
    - Two main functions: `get_random_image` and `save_annotation`
-   - Set up through [Web Interface](https://bioimage-io.github.io/bioimageio-colab/)
+   - Set up through [Web Interface](https://bioimage.io/#/colab)
    - Implementation in [docs/data_providing_service.py](https://github.com/bioimage-io/bioimageio-colab/blob/main/docs/data_providing_service.py)
 
 2. **Interactive Interface**
